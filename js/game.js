@@ -229,7 +229,7 @@ const Game = (() => {
 
     bindInput() {
       Gesture.attach(document.getElementById('screen-game'), {
-        punch: (side, type) => this.onMyPunch(side, type),
+        punch: (side, type, sx, sy) => this.onMyPunch(side, type, sx, sy),
         guardStart: (side, nx, ny) => this.onMyGuard(side, nx, ny, true),
         guardMove: (side, nx, ny) => this.onMyGuard(side, nx, ny, false),
         guardEnd: side => {
@@ -265,9 +265,34 @@ const Game = (() => {
       }
     }
 
-    onMyPunch(side, type) {
+    /* 相手の各部位をスクリーン座標に投影し、タッチ開始位置に一番近い部位を返す */
+    aimZone(px, py) {
+      let best = null, bd = Infinity;
+      for (const zone of ['face', 'belly', 'chestL', 'chestR']) {
+        const v = this.oppBoxer.getZonePos(zone).project(this.camera);
+        const sx = (v.x + 1) * innerWidth / 2;
+        const sy = (1 - v.y) * innerHeight / 2;
+        const d = Math.hypot(sx - px, sy - py);
+        if (d < bd) { bd = d; best = zone; }
+      }
+      return best;
+    }
+
+    /* 狙った部位に黄色いリングを一瞬表示して「そこへ飛ぶ」ことを伝える */
+    aimFlash(zone) {
+      const v = this.oppBoxer.getZonePos(zone).project(this.camera);
+      const el = document.createElement('div');
+      el.className = 'aim-flash';
+      el.style.left = (v.x + 1) * innerWidth / 2 + 'px';
+      el.style.top = (1 - v.y) * innerHeight / 2 + 'px';
+      document.getElementById('screen-game').appendChild(el);
+      this.after(0.35, () => el.remove());
+    }
+
+    onMyPunch(side, type, sx, sy) {
       if (!this.canIAct()) return;
-      const zone = targetZone(type, side);
+      // タッチした位置に近い部位を狙う。座標が無い場合は従来のパンチ種別→部位マップ
+      const zone = sx != null ? this.aimZone(sx, sy) : targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
 
       // スタミナとカウンター補正: 疲れていると弱く、ジャストガード直後の一発は強い
@@ -284,8 +309,9 @@ const Game = (() => {
       if (!started) return;
       this.me.sta = Math.max(0, this.me.sta - cost);
       if (counter) this.me.counterUntil = 0; // カウンターは一発限り
+      this.aimFlash(zone);
       Sfx.whoosh();
-      if (this.mode === 'online') this.net.game({ k: 'punch', side, type, mul, sta: Math.round(this.me.sta) });
+      if (this.mode === 'online') this.net.game({ k: 'punch', side, type, zone, mul, sta: Math.round(this.me.sta) });
       else this.cpu.onPlayerPunch(zone, spec.impact);
     }
 
@@ -336,9 +362,9 @@ const Game = (() => {
       if (this.mode === 'cpu' && this.opp.hp <= 0 && this.state === 'fight') this.doDown('opp');
     }
 
-    enemyPunch(side, type, mul = 1) {
+    enemyPunch(side, type, mul = 1, aimedZone = null) {
       if (this.state !== 'fight' || !this.alive) return;
-      const zone = targetZone(type, side);
+      const zone = aimedZone || targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
       const target = this.myBoxer.getZonePos(zone);
       this.oppBoxer.startPunch(side, type, target, () => this.resolveIncoming(zone, spec, side, mul));
@@ -493,7 +519,7 @@ const Game = (() => {
         switch (d.k) {
           case 'punch':
             if (typeof d.sta === 'number') this.opp.sta = d.sta;
-            this.enemyPunch(d.side, d.type, d.mul || 1);
+            this.enemyPunch(d.side, d.type, d.mul || 1, d.zone);
             break;
           case 'guard':
             if (typeof d.sta === 'number') this.opp.sta = d.sta;
@@ -640,7 +666,7 @@ const Game = (() => {
       Gesture.cancelAll();
       
       window.removeEventListener('resize', this.onResize);
-      document.querySelectorAll('.telegraph').forEach(e => e.remove());
+      document.querySelectorAll('.telegraph, .aim-flash').forEach(e => e.remove());
       
       if (this.net) {
         this.net.on('game', null);

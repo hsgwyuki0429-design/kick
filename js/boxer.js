@@ -2,6 +2,9 @@
 const Boxer = (() => {
   const LU = 0.34, LF = 0.32, GLOVE = 0.095;
   const SHOULDER_Y = 1.42, SHOULDER_X = 0.24;
+  // 腕のリーチ(0.65)だけでは相手(肩から約1.25)に届かないため、
+  // パンチ中は体ごと大きく踏み込んで拳を実際に着弾点まで運ぶ
+  const PUNCH_LUNGE = 0.55;
 
   const PUNCH_SPECS = {
     straight: { impact: 0.20, total: 0.44, dmg: 7 },
@@ -176,6 +179,7 @@ const Boxer = (() => {
       body.position.z = -e * 0.55;
 
       let lunge = 0, twist = 0;
+      const fired = []; // 着弾コールバックは踏み込み適用後に呼ぶ(拳のワールド座標を正しくするため)
       for (const side of ['L', 'R']) {
         const arm = arms[side];
         const base = basePose(arm, idleT);
@@ -190,16 +194,17 @@ const Boxer = (() => {
                .addScaledVector(p.ctrl, 2 * (1 - k) * k)
                .addScaledVector(p.target, k * k);
             arm.hand.copy(_v2);
-            const w = Math.sin(Math.PI * Math.min(1, s + 0.15));
-            lunge = Math.max(lunge, w * 0.30);
-            twist += -arm.sideSign * w * 0.45;
+            // 踏み込みは着弾の瞬間に最大(以前は sin カーブで着弾時に0に戻り、拳が届いていなかった)
+            lunge = Math.max(lunge, k * PUNCH_LUNGE);
+            twist += -arm.sideSign * k * 0.4;
           } else {
-            if (!p.fired) { p.fired = true; p.onImpact && p.onImpact(); }
+            if (!p.fired) { p.fired = true; if (p.onImpact) fired.push(p.onImpact); }
             const s = Math.min(1, (p.t - p.spec.impact) / (p.spec.total - p.spec.impact));
-            arm.hand.lerpVectors(p.target, base, s * s * (3 - 2 * s));
-            const w = 1 - s;
-            lunge = Math.max(lunge, w * 0.18);
-            twist += -arm.sideSign * w * 0.2;
+            const k = s * s * (3 - 2 * s);
+            arm.hand.lerpVectors(p.target, base, k);
+            const w = 1 - k;
+            lunge = Math.max(lunge, w * PUNCH_LUNGE);
+            twist += -arm.sideSign * w * 0.3;
             if (p.t >= p.spec.total) {
               arm.mode = 'idle';
               const done = p.onDone; arm.punch = null;
@@ -225,6 +230,8 @@ const Boxer = (() => {
         body.rotation.y = twist;
         torso.rotation.y = twist * 0.5;
       }
+
+      for (const fn of fired) fn();
     }
 
     function getZonePos(zone) {

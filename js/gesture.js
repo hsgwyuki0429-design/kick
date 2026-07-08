@@ -136,7 +136,8 @@ const Gesture = (() => {
           }
         }
         
-        if (cb.punch) cb.punch(t.side, type);
+        // 開始位置も渡す: タッチした場所に近い部位を狙えるようにする(エイム)
+        if (cb.punch) cb.punch(t.side, type, t.startX, t.startY);
       }
     });
 

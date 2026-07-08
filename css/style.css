@@ -153,6 +153,12 @@ input[type=text]:focus { border-color: #ffd75e; }
 .guard-rect.just { background: rgba(255, 215, 94, 0.5); border-color: #ffe98a;
   box-shadow: 0 0 28px rgba(255, 215, 94, 0.95), inset 0 0 24px rgba(255, 255, 255, 0.4); }
 
+/* 自分のパンチの狙い先表示(タッチ位置から決まった部位に一瞬光る) */
+.aim-flash { position: absolute; z-index: 24; pointer-events: none; width: 44px; height: 44px;
+  margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid rgba(255, 230, 120, 0.95);
+  box-shadow: 0 0 12px rgba(255, 220, 100, 0.8); animation: aimpop 0.35s ease-out forwards; }
+@keyframes aimpop { 0% { transform: scale(1.7); opacity: 1; } 100% { transform: scale(0.7); opacity: 0; } }
+
 /* incoming punch telegraph */
 .telegraph { position: absolute; z-index: 24; pointer-events: none; width: 70px; height: 70px;
   margin: -35px 0 0 -35px; border-radius: 50%; border: 4px solid rgba(255, 80, 60, 0.9);
