@@ -60,7 +60,7 @@
         <li><b>内側へスワイプ</b>: 相手の反対側のボディ (クロス)</li>
         <li><b>真ん中から上へスワイプ</b>: 顔面アッパー</li>
         <li><b>下から真ん中へフリック</b>: フック</li>
-        <li><b>長押し</b>: ガード(押したまま動かして相手のパンチの的に重ねる)</li>
+        <li><b>ボタンタッチ/長押し</b>: ガード(押したまま動かして相手のパンチの的に重ねる)</li>
       </ul>
     </details>
   </div>
@@ -108,6 +108,11 @@
 <div id="screen-game" class="hidden">
   <canvas id="game-canvas"></canvas>
   <div id="vignette"></div>
+  
+  <!-- 追加: 瞬時に発動できる防御ボタン -->
+  <div id="guard-btn-l" class="guard-btn" data-side="L"></div>
+  <div id="guard-btn-r" class="guard-btn" data-side="R"></div>
+
   <div id="hud">
     <div id="hud-top">
       <div class="fighter left">
