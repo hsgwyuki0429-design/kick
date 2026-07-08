@@ -37,8 +37,16 @@ const Sfx = (() => {
 const Game = (() => {
   let renderer = null; // WebGLコンテキストは全試合で使い回す
 
-  // 被弾部位 → 自分の画面上のアンカー位置(ガード矩形との判定に使う)
-  const ANCHORS = { face: [0.5, 0.40], chestL: [0.36, 0.72], chestR: [0.64, 0.72] };
+  // 被弾部位 → 自分の画面上のアンカー位置(ガード矩形/拳の着弾位置の判定に使う)
+  //  ① 顔面 = 視点の上1/3を横に三等分した真ん中
+  //  ② 腹   = 視点の下1/3を横に三等分した真ん中
+  //  ③ 胸   = 視点の上下中段(真ん中1/3)を横に二等分し、左=左胸 / 右=右胸
+  const ANCHORS = {
+    face:   [0.5,  1 / 6],   // 上段・横中央
+    belly:  [0.5,  5 / 6],   // 下段・横中央
+    chestL: [0.25, 0.5],     // 中段・左半分 = 左胸
+    chestR: [0.75, 0.5],     // 中段・右半分 = 右胸
+  };
 
   function anchorPx(zone) {
     const a = ANCHORS[zone];
@@ -46,9 +54,18 @@ const Game = (() => {
   }
 
   // パンチ種別と腕 → 相手のどの部位に当たるか (要件③)
+  //  ① タップ=ストレート → 相手の正面(その拳の真正面)の胸
+  //  ② 内側スワイプ=ボディ → 相手の反対側の胸
+  //  ③ 真ん中から上=アッパー → 顔面
+  //  ④ 下から真ん中へ=フック → 腹
   function targetZone(type, side) {
-    if (type === 'body') return side === 'L' ? 'chestR' : 'chestL'; // 反対側の半身の胸
-    return 'face'; // ストレート・アッパー・フックは顔面
+    switch (type) {
+      case 'straight': return side === 'L' ? 'chestR' : 'chestL'; // 正面の胸
+      case 'body':     return side === 'L' ? 'chestL' : 'chestR'; // 反対側の胸
+      case 'uppercut': return 'face';
+      case 'hook':     return 'belly';
+      default:         return 'face';
+    }
   }
 
   // KO率 (要件⑦): 初期5%、ダウン1回ごと+12%、1分ごと+3%
@@ -278,12 +295,23 @@ const Game = (() => {
       if (this.mode === 'cpu' && this.opp.hp <= 0 && this.state === 'fight') this.doDown('opp');
     }
 
+    /* 画面アンカー(守りの当たり判定の位置) → カメラ前方のワールド座標。
+     * 相手の拳がこの点へ飛ぶことで、受けた攻撃が守りの割り当て位置に来る (要件③守り) */
+    anchorWorld(zone) {
+      const a = ANCHORS[zone];
+      const ndc = new THREE.Vector3(a[0] * 2 - 1, -(a[1] * 2 - 1), 0.5);
+      ndc.unproject(this.camera);
+      const dir = ndc.sub(this.camera.position).normalize();
+      return this.camera.position.clone().addScaledVector(dir, 0.42);
+    }
+
     /* ---------- 相手のパンチ (CPU / オンライン相手 共通入口) ---------- */
     enemyPunch(side, type) {
       if (this.state !== 'fight' || !this.alive) return;
       const zone = targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
-      const target = this.myBoxer.getZonePos(zone);
+      // 拳の着弾点は守りの割り当て位置(画面アンカー)に一致させる
+      const target = this.anchorWorld(zone);
       this.oppBoxer.startPunch(side, type, target, () => this.resolveIncoming(zone, spec, side));
       this.telegraph(zone, spec.impact); // どこに来るか赤いリングで予告
     }
@@ -440,6 +468,7 @@ const Game = (() => {
     showCpuGuard(zone, dur) {
       const side = zone === 'chestL' ? 'R' : zone === 'chestR' ? 'L' : 'R';
       const pos = zone === 'face' ? new THREE.Vector3(0, 1.56, 0.34)
+        : zone === 'belly' ? new THREE.Vector3(0, 1.02, 0.34)
         : zone === 'chestL' ? new THREE.Vector3(0.16, 1.24, 0.32)
         : new THREE.Vector3(-0.16, 1.24, 0.32);
       this.oppBoxer.setGuardTarget(side, pos);

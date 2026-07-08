@@ -132,11 +132,15 @@ const Boxer = (() => {
       const mid = start.clone().add(target).multiplyScalar(0.5);
       const s = arm.sideSign;
       const ctrl = mid.clone();
-      switch (type) { // 軌道: ベジェ制御点で腕の振りを変える (要件④)
-        case 'straight': ctrl.y += 0.02; break;
-        case 'hook':     ctrl.x += s * 0.55; ctrl.y += 0.06; ctrl.z += 0.10; break;
+      switch (type) { // 軌道: ベジェ制御点で腕の振りを攻撃ごとに一致させる (要件①〜④攻撃)
+        // ① ストレート: 正面の胸へまっすぐ突き出す
+        case 'straight': ctrl.y += 0.02; ctrl.z += 0.05; break;
+        // ② ボディ: 内側へ回り込み、反対側の胸へ横に振り抜く
+        case 'body':     ctrl.x += s * 0.30; ctrl.y -= 0.05; ctrl.z += 0.05; break;
+        // ③ アッパー: 下から深くすくい上げて顔面へ
         case 'uppercut': ctrl.x += s * 0.10; ctrl.y -= 0.42; ctrl.z += 0.15; break;
-        case 'body':     ctrl.x += s * 0.38; ctrl.y -= 0.18; ctrl.z += 0.05; break;
+        // ④ フック: 下から横に大きく回して腹へ打ち込む
+        case 'hook':     ctrl.x += s * 0.50; ctrl.y -= 0.10; ctrl.z += 0.10; break;
       }
       arm.mode = 'punch';
       arm.punch = { type, spec, t: 0, start, target, ctrl, fired: false, onImpact, onDone };
@@ -223,9 +227,10 @@ const Boxer = (() => {
       }
     }
 
-    // 攻撃対象部位のワールド座標 (zone: face / chestL / chestR ※本人から見た左右)
+    // 攻撃対象部位のワールド座標 (zone: face / belly / chestL / chestR ※本人から見た左右)
     function getZonePos(zone) {
       const p = zone === 'face' ? _v1.set(0, 1.60, 0.14)
+        : zone === 'belly' ? _v1.set(0, 1.02, 0.16)
         : zone === 'chestL' ? _v1.set(0.13, 1.24, 0.14)
         : _v1.set(-0.13, 1.24, 0.14);
       return body.localToWorld(p.clone());
