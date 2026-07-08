@@ -66,9 +66,6 @@
   }
 
   /* ---------- オンライン (要件⑧) ---------- */
-  // http/https でこのページを開いていれば、配信元サーバー = 対戦サーバーなので
-  // URLは自動決定して変更不可にする(誤って変えると相手と別サーバーになるため)。
-  // file:// 等で開いた場合だけ手入力欄を出す。
   function autoServerUrl() {
     if (location.protocol === 'https:') return 'wss://' + location.host;
     if (location.protocol === 'http:') return 'ws://' + location.host;
@@ -124,7 +121,7 @@
       });
     });
 
-    net.on('challenged', m => { // 対戦申請が来た → 受ける/断る
+    net.on('challenged', m => { 
       $('challenge-text').textContent = m.from + ' から対戦申請が来ました!';
       $('challenge-modal').classList.remove('hidden');
       $('challenge-accept').onclick = () => {
@@ -139,7 +136,7 @@
 
     net.on('declined', m => status(m.by + ' に断られました…'));
 
-    net.on('matchStart', m => { // 部屋に二人だけなら自動でここに来る
+    net.on('matchStart', m => { 
       if (match) return;
       $('challenge-modal').classList.add('hidden');
       startOnlineMatch(m.opponent);
@@ -162,11 +159,11 @@
       myName: name,
       oppName: opponent,
       myFace: FacePaint.current(),
-      oppFace: null, // 相手の顔は対戦開始時に送られてくる
+      oppFace: null, 
       onEnd: () => {
         match = null;
         net.endMatch();
-        bindLobbyHandlers(); // 試合中に上書きしたハンドラを戻す
+        bindLobbyHandlers(); 
         openOnline();
         if (net.connected && inRoom) $('room-panel').classList.remove('hidden');
       },
@@ -190,9 +187,10 @@
           await net.connect(url, name);
         } catch (e) {
           if (e.message === 'nameTaken') {
-            status('その名前は既に使われています。名前を変えてください。');
+            // エラーメッセージを修正：合言葉のエラーだと勘違いさせないようにする
+            status(`リングネーム「${name}」は現在他の人が使用中です。一度メニューに戻り「名前を変える」から変更してください。`);
           } else if (e.message === 'badName') {
-            status('名前が不正です。名前を変えてください。');
+            status('リングネームが不正です。メニューに戻って名前を変更してください。');
           } else {
             status('接続失敗: ' + e.message);
           }
