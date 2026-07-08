@@ -1,9 +1,5 @@
-/* game.js — 試合本体。3Dシーン、パンチ解決、ガード判定、KO、エフェクト。
- * 要件: ⑤被弾時の画面端赤エフェクト / ⑥ガード成功で相手0.2秒行動不能 / ⑦KO率(初期5%、時間とダウンで上昇)
- * オンライン時は「守る側が判定する」方式: 相手のパンチは自分の画面のガード矩形で判定し、結果を送り返す。
- */
+/* game.js — 試合本体。3Dシーン、パンチ解決、ガード判定、KO、エフェクト。 */
 
-/* ---- 効果音 (WebAudio 簡易シンセ) ---- */
 const Sfx = (() => {
   let ctx = null;
   function ac() {
@@ -22,7 +18,7 @@ const Sfx = (() => {
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
       o.connect(g); g.connect(c.destination);
       o.start(t); o.stop(t + dur + 0.02);
-    } catch (e) { /* 音が出せない環境は無視 */ }
+    } catch (e) { }
   }
   return {
     unlock: () => { try { ac(); } catch (e) {} },
@@ -35,36 +31,43 @@ const Sfx = (() => {
 })();
 
 const Game = (() => {
-  let renderer = null; // WebGLコンテキストは全試合で使い回す
+  let renderer = null;
 
-  // 被弾部位 → 自分の画面上のアンカー位置(ガード矩形との判定に使う)
-  const ANCHORS = { face: [0.5, 0.40], chestL: [0.36, 0.72], chestR: [0.64, 0.72] };
+  // 画面上のガードアンカー位置 (自分視点)
+  const ANCHORS = {
+    face:   [0.5,  1/6],
+    belly:  [0.5,  5/6],
+    chestL: [0.25, 0.5], // 画面左側 (＝自分の左胸)
+    chestR: [0.75, 0.5]  // 画面右側 (＝自分の右胸)
+  };
 
   function anchorPx(zone) {
     const a = ANCHORS[zone];
     return { x: a[0] * innerWidth, y: a[1] * innerHeight };
   }
 
-  // パンチ種別と腕 → 相手のどの部位に当たるか (要件③)
   function targetZone(type, side) {
-    if (type === 'body') return side === 'L' ? 'chestR' : 'chestL'; // 反対側の半身の胸
-    return 'face'; // ストレート・アッパー・フックは顔面
+    // まっすぐ打つストレートは、相手の対角の胸に当たる（自分の左腕 L → 相手の右胸 chestR）
+    if (type === 'straight') return side === 'L' ? 'chestR' : 'chestL';
+    // 内側へスワイプするボディは、クロスして相手の同じ側の胸に当たる（左腕 L → 相手の左胸 chestL）
+    if (type === 'body')     return side === 'L' ? 'chestL' : 'chestR';
+    if (type === 'hook')     return 'belly'; // 腹
+    return 'face';                           // 顔
   }
 
-  // KO率 (要件⑦): 初期5%、ダウン1回ごと+12%、1分ごと+3%
   function koChance(prevDowns, elapsedSec) {
     return Math.min(0.85, 0.05 + prevDowns * 0.12 + (elapsedSec / 60) * 0.03);
   }
 
   class Match {
     constructor(opts) {
-      this.mode = opts.mode;              // 'cpu' | 'online'
+      this.mode = opts.mode;
       this.net = opts.net || null;
       this.onEnd = opts.onEnd;
       this.myName = opts.myName;
       this.oppName = opts.oppName;
       this.alive = true;
-      this.state = 'intro';               // intro | fight | down | over
+      this.state = 'intro';
       this.elapsed = 0;
       this.me  = { hp: 100, downs: 0, stunUntil: 0 };
       this.opp = { hp: 100, downs: 0, stunUntil: 0 };
@@ -78,7 +81,6 @@ const Game = (() => {
       if (this.mode === 'cpu') this.cpu = new CpuBrain(this);
       else this.bindNet();
 
-      // READY → FIGHT!
       this.banner('READY...');
       this.after(1.4, () => {
         this.banner('FIGHT!');
@@ -92,7 +94,6 @@ const Game = (() => {
       requestAnimationFrame(this.loop);
     }
 
-    /* ---------- 3Dシーン ---------- */
     initScene(opts) {
       const canvas = document.getElementById('game-canvas');
       if (!renderer) {
@@ -114,17 +115,16 @@ const Game = (() => {
       const spot = new THREE.PointLight(0xffe9c0, 0.8, 12);
       spot.position.set(0, 4.5, 0);
       this.scene.add(spot);
-      const back = new THREE.PointLight(0xccd6ff, 0.7, 8); // 自分の腕を照らす
+      const back = new THREE.PointLight(0xccd6ff, 0.7, 8);
       back.position.set(0, 2.2, 2.6);
       this.scene.add(back);
 
       this.buildRing();
 
-      // 自分(手前・カメラ視点) / 相手(奥)
       this.myBoxer = Boxer.create({ trunks: 0x2244cc, glove: 0xcc2222, faceURL: opts.myFace });
       this.myBoxer.group.position.set(0, 0, 0.72);
       this.myBoxer.group.rotation.y = Math.PI;
-      this.myBoxer.setHeadVisible(false); // 一人称なので自分の頭は消す
+      this.myBoxer.setHeadVisible(false);
       this.scene.add(this.myBoxer.group);
 
       this.oppBoxer = Boxer.create({ trunks: 0xcc2244, glove: 0x222266, skin: 0xd39a63, faceURL: opts.oppFace });
@@ -171,7 +171,6 @@ const Game = (() => {
       }
     }
 
-    /* ---------- HUD ---------- */
     initHud() {
       document.getElementById('hud-name-me').textContent = this.myName;
       document.getElementById('hud-name-opp').textContent = this.oppName;
@@ -204,7 +203,6 @@ const Game = (() => {
       el.style.animation = '';
     }
 
-    /* ---------- 入力 ---------- */
     bindInput() {
       Gesture.attach(document.getElementById('screen-game'), {
         punch: (side, type) => this.onMyPunch(side, type),
@@ -219,12 +217,11 @@ const Game = (() => {
     }
 
     canIAct() {
-      return this.state === 'fight' &&
-        performance.now() >= this.me.stunUntil && this.me.hp > 0;
+      return this.state === 'fight' && performance.now() >= this.me.stunUntil && this.me.hp > 0;
     }
 
-    guardLocal(nx, ny) { // 指の位置 → 腕を上げる先(ボクサーローカル座標)
-      return new THREE.Vector3((0.5 - nx) * 1.1, 1.42 + (0.55 - ny) * 0.9, 0.36);
+    guardLocal(nx, ny) {
+      return new THREE.Vector3((0.5 - nx) * 1.2, 1.35 + (0.5 - ny) * 1.2, 0.36);
     }
 
     onMyGuard(side, nx, ny, isStart) {
@@ -239,7 +236,6 @@ const Game = (() => {
       }
     }
 
-    /* ---------- 自分のパンチ ---------- */
     onMyPunch(side, type) {
       if (!this.canIAct()) return;
       const zone = targetZone(type, side);
@@ -260,7 +256,6 @@ const Game = (() => {
       else this.applyHitOnOpp(spec.dmg, side);
     }
 
-    /* 自分のパンチがガードされた → 自分が0.2秒行動不能 (要件⑥) */
     applyBlockedByOpp(side) {
       this.me.stunUntil = performance.now() + 200;
       Sfx.block();
@@ -278,14 +273,13 @@ const Game = (() => {
       if (this.mode === 'cpu' && this.opp.hp <= 0 && this.state === 'fight') this.doDown('opp');
     }
 
-    /* ---------- 相手のパンチ (CPU / オンライン相手 共通入口) ---------- */
     enemyPunch(side, type) {
       if (this.state !== 'fight' || !this.alive) return;
       const zone = targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
       const target = this.myBoxer.getZonePos(zone);
       this.oppBoxer.startPunch(side, type, target, () => this.resolveIncoming(zone, spec, side));
-      this.telegraph(zone, spec.impact); // どこに来るか赤いリングで予告
+      this.telegraph(zone, spec.impact);
     }
 
     telegraph(zone, dur) {
@@ -299,16 +293,15 @@ const Game = (() => {
       this.after(dur + 0.05, () => el.remove());
     }
 
-    /* 相手のパンチ着弾: 自分のガード矩形の範囲内ならブロック (要件⑥) */
     resolveIncoming(zone, spec, side) {
       if (this.state !== 'fight' || !this.alive) return;
       const p = anchorPx(zone);
       const stunned = performance.now() < this.me.stunUntil;
       const g = Gesture.getGuards(stunned).find(r =>
-        Math.abs(p.x - r.x) < r.w / 2 + 14 && Math.abs(p.y - r.y) < r.h / 2 + 14
+        // 遊びやすさの究極の微調整: 判定に余裕を持たせ、指が少しずれてもガード成功とする (+24px)
+        Math.abs(p.x - r.x) < r.w / 2 + 24 && Math.abs(p.y - r.y) < r.h / 2 + 24
       );
       if (g) {
-        // ブロック成功 → 攻撃側が0.2秒行動不能
         Gesture.flashBlock(g.side);
         Sfx.block();
         this.spark(this.oppBoxer.getGloveWorld(side), 0x88ccff);
@@ -320,7 +313,6 @@ const Game = (() => {
       }
     }
 
-    /* 被弾: 画面の端が赤くなる (要件⑤) + カメラシェイク */
     takeDamage(dmg) {
       this.me.hp = Math.max(0, this.me.hp - dmg);
       Sfx.hit(dmg >= 12);
@@ -335,7 +327,6 @@ const Game = (() => {
       if (this.me.hp <= 0 && this.state === 'fight') this.doDown('me');
     }
 
-    /* ---------- ダウンとKO (要件⑦) ---------- */
     doDown(whoKey) {
       const who = this[whoKey];
       const boxer = whoKey === 'me' ? this.myBoxer : this.oppBoxer;
@@ -356,7 +347,6 @@ const Game = (() => {
         this.after(1.5, () => this.finish(whoKey === 'me' ? 'lose' : 'win', tko ? 'TKO' : 'KO'));
         return;
       }
-      // KOを免れた → 3秒後に立ち上がる。回復量はダウン数で減る
       this.after(3.0, () => {
         if (!this.alive || this.state === 'over') return;
         who.hp = Math.max(25, 60 - who.downs * 10);
@@ -390,7 +380,6 @@ const Game = (() => {
       });
     }
 
-    /* ---------- オンラインの受信処理 ---------- */
     bindNet() {
       this.net.on('game', m => {
         const d = m.d;
@@ -401,10 +390,10 @@ const Game = (() => {
             if (d.on) this.oppBoxer.setGuardTarget(d.side, this.guardLocal(d.nx, d.ny));
             else this.oppBoxer.setGuardTarget(d.side, null);
             break;
-          case 'face': // 相手が描いた顔 (要件⑩)
+          case 'face':
             this.oppBoxer.setFace(d.data);
             break;
-          case 'result': // 自分のパンチの結果(相手側で判定された)
+          case 'result':
             if (d.blocked) this.applyBlockedByOpp(d.side || 'R');
             else this.applyHitOnOpp(0, d.side || 'R', d.hp);
             break;
@@ -436,12 +425,12 @@ const Game = (() => {
       });
     }
 
-    /* CPUのガードを腕の動きで見せる */
     showCpuGuard(zone, dur) {
-      const side = zone === 'chestL' ? 'R' : zone === 'chestR' ? 'L' : 'R';
+      const side = zone === 'chestL' ? 'L' : zone === 'chestR' ? 'R' : zone === 'belly' ? (Math.random() < 0.5 ? 'L' : 'R') : 'R';
       const pos = zone === 'face' ? new THREE.Vector3(0, 1.56, 0.34)
-        : zone === 'chestL' ? new THREE.Vector3(0.16, 1.24, 0.32)
-        : new THREE.Vector3(-0.16, 1.24, 0.32);
+        : zone === 'belly' ? new THREE.Vector3(0, 1.05, 0.32)
+        : zone === 'chestL' ? new THREE.Vector3(0.16, 1.35, 0.32)
+        : new THREE.Vector3(-0.16, 1.35, 0.32);
       this.oppBoxer.setGuardTarget(side, pos);
       this.after(dur, () => {
         if (this.alive && (!this.cpu.guard || this.cpu.now >= this.cpu.guard.until)) {
@@ -450,7 +439,6 @@ const Game = (() => {
       });
     }
 
-    /* ---------- エフェクト ---------- */
     spark(worldPos, color) {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.06, 8, 6),
@@ -461,7 +449,6 @@ const Game = (() => {
       this.sparks.push({ m, ttl: 0.22 });
     }
 
-    /* ---------- メインループ ---------- */
     loop() {
       if (!this.alive) return;
       requestAnimationFrame(this.loop);
@@ -471,7 +458,6 @@ const Game = (() => {
 
       if (this.state === 'fight' || this.state === 'down') this.elapsed += dt;
 
-      // 期限付きタイマー
       for (let i = this.timers.length - 1; i >= 0; i--) {
         const t = this.timers[i];
         t.left -= dt;
@@ -486,7 +472,6 @@ const Game = (() => {
       this.myBoxer.update(dt);
       this.oppBoxer.update(dt);
 
-      // 一人称カメラ: 自分の頭に追従(ダウン時は一緒に倒れる)
       const head = this.myBoxer.getHeadWorld();
       this.shake = Math.max(0, this.shake - dt * 3.5);
       const s = this.shake * 0.05;
