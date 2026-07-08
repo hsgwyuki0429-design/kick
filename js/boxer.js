@@ -128,24 +128,20 @@ const Boxer = (() => {
       // 各パンチの自然な軌道を作るための制御点調整
       switch (type) {
         case 'straight': 
-          // まっすぐ打ち出す
           ctrl.y += 0.05; 
           ctrl.x += s * 0.05; 
           break; 
         case 'body': // クロス
-          // 内側を通りつつ下へえぐる
           ctrl.x -= s * 0.15; 
           ctrl.y -= 0.10; 
           ctrl.z += 0.05; 
           break; 
         case 'hook':     
-          // 外側から大きく回る
           ctrl.x += s * 0.35; 
           ctrl.y += 0.05; 
           ctrl.z += 0.10; 
           break;
         case 'uppercut': 
-          // 下から突き上げる
           ctrl.x += s * 0.05; 
           ctrl.y -= 0.30; 
           ctrl.z += 0.10; 
@@ -231,14 +227,12 @@ const Boxer = (() => {
       }
     }
 
-    // 攻撃対象部位のワールド座標
     function getZonePos(zone) {
-      // 相手からの顔面への攻撃が「カメラの真ん中」に来るように y, z をカメラ位置付近に合わせる
       if (zone === 'face')   return body.localToWorld(_v1.set(0, 1.62, 0.20).clone());
       if (zone === 'belly')  return body.localToWorld(_v1.set(0, 1.10, 0.18).clone());
-      // chestL は本人の左胸 (ローカル+x)、chestR は本人の右胸 (ローカル-x)
-      if (zone === 'chestL') return body.localToWorld(_v1.set(0.16, 1.35, 0.18).clone());
-      return body.localToWorld(_v1.set(-0.16, 1.35, 0.18).clone());
+      // パンチの軌道修正 (0.16 -> 0.25へ拡大)
+      if (zone === 'chestL') return body.localToWorld(_v1.set(0.25, 1.35, 0.18).clone());
+      return body.localToWorld(_v1.set(-0.25, 1.35, 0.18).clone());
     }
 
     function getHeadWorld() {
