@@ -56,6 +56,18 @@ const Game = (() => {
     return Math.min(0.85, 0.05 + prevDowns * 0.12 + (elapsedSec / 60) * 0.03);
   }
 
+  /* ---- 駆け引き用パラメータ ---- */
+  const STA_MAX = 100;
+  const STA_COST = { straight: 12, body: 15, uppercut: 19, hook: 22 }; // パンチのスタミナ消費
+  const STA_REGEN = 11;        // 通常回復量 (毎秒)
+  const STA_REGEN_GUARD = 5;   // ガード中は回復が遅い → ガード固めを抑止
+  const TIRED_MUL = 0.45;      // スタミナ切れパンチの威力倍率
+  const JUST_WINDOW_MS = 300;  // 出したてのガードで防ぐと「ジャストガード」
+  const STUN_MS = 900;         // 通常ブロックされた側の硬直
+  const JUST_STUN_MS = 1600;   // ジャストガードされた側の硬直(大きな隙)
+  const COUNTER_MS = 2200;     // ジャストガード後のカウンター猶予
+  const COUNTER_MUL = 1.6;     // カウンター一発の威力倍率
+
   class Match {
     constructor(opts) {
       this.mode = opts.mode;
@@ -66,8 +78,8 @@ const Game = (() => {
       this.alive = true;
       this.state = 'intro';
       this.elapsed = 0;
-      this.me  = { hp: 100, downs: 0, stunUntil: 0 };
-      this.opp = { hp: 100, downs: 0, stunUntil: 0 };
+      this.me  = { hp: 100, downs: 0, stunUntil: 0, sta: STA_MAX, counterUntil: 0 };
+      this.opp = { hp: 100, downs: 0, stunUntil: 0, sta: STA_MAX, counterUntil: 0 };
       this.timers = [];
       this.shake = 0;
       
@@ -108,7 +120,8 @@ const Game = (() => {
       this.scene.background = new THREE.Color(0x0a0c16);
       this.scene.fog = new THREE.Fog(0x0a0c16, 6, 16);
 
-      this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 50);
+      // 一人称の視野を広めに(75→85): 相手の全身とテレグラフを視認しやすくする
+      this.camera = new THREE.PerspectiveCamera(85, innerWidth / innerHeight, 0.05, 50);
 
       this.scene.add(new THREE.AmbientLight(0x8890b0, 0.9));
       const key = new THREE.DirectionalLight(0xfff2dd, 0.9);
@@ -178,6 +191,9 @@ const Game = (() => {
       document.getElementById('hud-name-me').textContent = this.myName;
       document.getElementById('hud-name-opp').textContent = this.oppName;
       document.getElementById('result-overlay').classList.add('hidden');
+      for (const id of ['stun-note', 'just-note', 'counter-note']) {
+        document.getElementById(id).classList.add('hidden');
+      }
       this.updateHud();
     }
 
@@ -187,8 +203,13 @@ const Game = (() => {
         const pct = Math.max(0, who.hp);
         el.style.width = pct + '%';
         el.className = 'hpfill' + (pct < 25 ? ' danger' : pct < 55 ? ' warn' : '');
+        const sta = document.getElementById('sta-' + id);
+        sta.style.width = Math.max(0, who.sta) + '%';
+        sta.className = 'stafill' + (who.sta < 25 ? ' low' : '');
         document.getElementById('downs-' + id).textContent = '●'.repeat(who.downs);
       }
+      document.getElementById('counter-note').classList.toggle(
+        'hidden', performance.now() >= this.me.counterUntil || this.state !== 'fight');
       const t = Math.floor(this.elapsed);
       document.getElementById('hud-timer').textContent =
         Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
@@ -239,7 +260,7 @@ const Game = (() => {
         const now = performance.now();
         if (isStart || now - this.lastGuardSend[side] > 80) {
           this.lastGuardSend[side] = now;
-          this.net.game({ k: 'guard', side, on: true, nx, ny });
+          this.net.game({ k: 'guard', side, on: true, nx, ny, sta: Math.round(this.me.sta) });
         }
       }
     }
@@ -248,31 +269,56 @@ const Game = (() => {
       if (!this.canIAct()) return;
       const zone = targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
+
+      // スタミナとカウンター補正: 疲れていると弱く、ジャストガード直後の一発は強い
+      const cost = STA_COST[type];
+      let mul = 1;
+      if (this.me.sta < cost) mul *= TIRED_MUL;
+      const counter = performance.now() < this.me.counterUntil;
+      if (counter) mul *= COUNTER_MUL;
+
       const target = this.oppBoxer.getZonePos(zone);
       const started = this.myBoxer.startPunch(side, type, target, () => {
-        if (this.mode === 'cpu') this.resolveMyPunchOnCpu(zone, spec, side);
+        if (this.mode === 'cpu') this.resolveMyPunchOnCpu(zone, spec, side, mul);
       });
       if (!started) return;
+      this.me.sta = Math.max(0, this.me.sta - cost);
+      if (counter) this.me.counterUntil = 0; // カウンターは一発限り
       Sfx.whoosh();
-      if (this.mode === 'online') this.net.game({ k: 'punch', side, type });
+      if (this.mode === 'online') this.net.game({ k: 'punch', side, type, mul, sta: Math.round(this.me.sta) });
       else this.cpu.onPlayerPunch(zone, spec.impact);
     }
 
-    resolveMyPunchOnCpu(zone, spec, side) {
+    resolveMyPunchOnCpu(zone, spec, side, mul) {
       if (this.state !== 'fight' || !this.alive) return;
-      if (this.cpu.blocks(zone)) this.applyBlockedByOpp(side);
-      else this.applyHitOnOpp(spec.dmg, side);
+      const b = this.cpu.blocks(zone);
+      if (b) {
+        this.applyBlockedByOpp(side, b.just);
+        if (b.just) {
+          this.opp.counterUntil = performance.now() + COUNTER_MS;
+          this.cpu.onJustBlock();
+        }
+      } else {
+        this.applyHitOnOpp(Math.round(spec.dmg * mul), side);
+      }
     }
 
-    applyBlockedByOpp(side) {
-      this.me.stunUntil = performance.now() + 900;
+    applyBlockedByOpp(side, just) {
+      const stunMs = just ? JUST_STUN_MS : STUN_MS;
+      this.me.stunUntil = performance.now() + stunMs;
       Sfx.block();
-      this.spark(this.myBoxer.getGloveWorld(side), 0x88ccff);
+      this.spark(this.myBoxer.getGloveWorld(side), just ? 0xffd75e : 0x88ccff);
       const note = document.getElementById('stun-note');
+      note.textContent = just ? 'ジャストガードされた! 大きな隙!' : 'ガードされた!';
       note.classList.remove('hidden');
-      this.after(0.9, () => note.classList.add('hidden'));
 
       Gesture.cancelAll(); // 強制キャンセル
+      Gesture.setStunned(true);
+      this.after(stunMs / 1000, () => {
+        if (performance.now() < this.me.stunUntil) return; // 別のブロックでスタンが延長された
+        note.classList.add('hidden');
+        Gesture.setStunned(false);
+      });
 
       this.myBoxer.setGuardTarget('L', null);
       this.myBoxer.setGuardTarget('R', null);
@@ -290,13 +336,26 @@ const Game = (() => {
       if (this.mode === 'cpu' && this.opp.hp <= 0 && this.state === 'fight') this.doDown('opp');
     }
 
-    enemyPunch(side, type) {
+    enemyPunch(side, type, mul = 1) {
       if (this.state !== 'fight' || !this.alive) return;
       const zone = targetZone(type, side);
       const spec = Boxer.PUNCH_SPECS[type];
       const target = this.myBoxer.getZonePos(zone);
-      this.oppBoxer.startPunch(side, type, target, () => this.resolveIncoming(zone, spec, side));
+      this.oppBoxer.startPunch(side, type, target, () => this.resolveIncoming(zone, spec, side, mul));
       this.telegraph(zone, spec.impact);
+    }
+
+    /* CPUのパンチ: プレイヤーと同じスタミナ・カウンター補正を通す */
+    cpuPunch(side, type) {
+      const cost = STA_COST[type];
+      let mul = 1;
+      if (this.opp.sta < cost) mul *= TIRED_MUL;
+      if (performance.now() < this.opp.counterUntil) {
+        mul *= COUNTER_MUL;
+        this.opp.counterUntil = 0;
+      }
+      this.opp.sta = Math.max(0, this.opp.sta - cost);
+      this.enemyPunch(side, type, mul);
     }
 
     telegraph(zone, dur) {
@@ -310,7 +369,7 @@ const Game = (() => {
       this.after(dur + 0.05, () => el.remove());
     }
 
-    resolveIncoming(zone, spec, side) {
+    resolveIncoming(zone, spec, side, mul = 1) {
       if (this.state !== 'fight' || !this.alive) return;
       const p = anchorPx(zone);
       const stunned = performance.now() < this.me.stunUntil;
@@ -318,22 +377,37 @@ const Game = (() => {
         Math.abs(p.x - r.x) < r.w / 2 + 24 && Math.abs(p.y - r.y) < r.h / 2 + 24
       );
       if (g) {
-        Gesture.flashBlock(g.side);
+        // 出したてのガードで防ぐと「ジャストガード」: 相手に大きな隙+カウンター権
+        const just = g.age <= JUST_WINDOW_MS;
+        Gesture.flashBlock(g.side, just);
         Sfx.block();
-        this.spark(this.oppBoxer.getGloveWorld(side), 0x88ccff);
-        
-        if (this.mode === 'cpu') { 
-          this.opp.stunUntil = performance.now() + 900; 
+        this.spark(this.oppBoxer.getGloveWorld(side), just ? 0xffd75e : 0x88ccff);
+        if (just) {
+          this.me.counterUntil = performance.now() + COUNTER_MS;
+          this.flashNote('just-note');
+        }
+
+        if (this.mode === 'cpu') {
+          this.opp.stunUntil = performance.now() + (just ? JUST_STUN_MS : STUN_MS);
           this.cpu.onStunned();
           this.oppBoxer.setGuardTarget('L', null);
           this.oppBoxer.setGuardTarget('R', null);
         } else {
-          this.net.game({ k: 'result', blocked: true, side });
+          this.net.game({ k: 'result', blocked: true, just, side });
         }
       } else {
-        this.takeDamage(spec.dmg);
+        this.takeDamage(Math.round(spec.dmg * mul));
         if (this.mode === 'online') this.net.game({ k: 'result', blocked: false, hp: this.me.hp, side });
       }
+    }
+
+    flashNote(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = '';
+      this.after(0.8, () => el.classList.add('hidden'));
     }
 
     takeDamage(dmg) {
@@ -358,7 +432,9 @@ const Game = (() => {
       const tko = who.downs >= 4;
       const ko = tko || Math.random() < chance;
       this.state = 'down';
-      
+      this.me.counterUntil = 0;
+      this.opp.counterUntil = 0;
+
       Gesture.cancelAll(); // ダウンしたらガード等も強制解除
 
       boxer.setDown(true);
@@ -376,6 +452,8 @@ const Game = (() => {
       this.after(3.0, () => {
         if (!this.alive || this.state === 'over') return;
         who.hp = Math.max(25, 60 - who.downs * 10);
+        this.me.sta = STA_MAX;
+        this.opp.sta = STA_MAX;
         boxer.setDown(false);
         this.banner('FIGHT!');
         Sfx.bell();
@@ -413,8 +491,12 @@ const Game = (() => {
         const d = m.d;
         if (!d || !this.alive) return;
         switch (d.k) {
-          case 'punch': this.enemyPunch(d.side, d.type); break;
+          case 'punch':
+            if (typeof d.sta === 'number') this.opp.sta = d.sta;
+            this.enemyPunch(d.side, d.type, d.mul || 1);
+            break;
           case 'guard':
+            if (typeof d.sta === 'number') this.opp.sta = d.sta;
             if (d.on) this.oppBoxer.setGuardTarget(d.side, this.guardLocal(d.nx, d.ny));
             else this.oppBoxer.setGuardTarget(d.side, null);
             break;
@@ -422,7 +504,7 @@ const Game = (() => {
             this.oppBoxer.setFace(d.data);
             break;
           case 'result':
-            if (d.blocked) this.applyBlockedByOpp(d.side || 'R');
+            if (d.blocked) this.applyBlockedByOpp(d.side || 'R', d.just);
             else this.applyHitOnOpp(0, d.side || 'R', d.hp);
             break;
           case 'down': {
@@ -438,6 +520,8 @@ const Game = (() => {
           }
           case 'getup':
             this.opp.hp = d.hp;
+            this.me.sta = STA_MAX;
+            this.opp.sta = STA_MAX;
             this.oppBoxer.setDown(false);
             this.state = 'fight';
             this.banner(null);
@@ -493,6 +577,16 @@ const Game = (() => {
       this.clock = now;
 
       if (this.state === 'fight' || this.state === 'down') this.elapsed += dt;
+
+      // スタミナ回復。ガードで守りを固めている間は回復が遅い(攻めと守りのトレードオフ)
+      if (this.state === 'fight') {
+        const meGuarding = Gesture.getGuards(now < this.me.stunUntil).length > 0;
+        this.me.sta = Math.min(STA_MAX, this.me.sta + dt * (meGuarding ? STA_REGEN_GUARD : STA_REGEN));
+        if (this.mode === 'cpu') {
+          const oppGuarding = !!(this.cpu.guard && this.cpu.now < this.cpu.guard.until);
+          this.opp.sta = Math.min(STA_MAX, this.opp.sta + dt * (oppGuarding ? STA_REGEN_GUARD : STA_REGEN));
+        }
+      }
 
       for (let i = this.timers.length - 1; i >= 0; i--) {
         const t = this.timers[i];
