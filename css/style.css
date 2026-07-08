@@ -110,6 +110,14 @@ input[type=text]:focus { border-color: #ffd75e; }
 .hpfill.warn { background: linear-gradient(180deg, #ffd75e, #e0a52c); }
 .hpfill.danger { background: linear-gradient(180deg, #ff6e6e, #c62f2f); }
 .hpbar.rev { direction: rtl; }
+
+/* スタミナゲージ(パンチで消費、ガード中は回復が遅い) */
+.stabar { height: 7px; margin-top: 2px; border-radius: 4px; background: #000a; border: 1px solid #fff3; overflow: hidden; }
+.stabar.rev { direction: rtl; }
+.stafill { height: 100%; width: 100%; border-radius: 3px; background: linear-gradient(180deg, #ffe98a, #e0b52c);
+  transition: width 0.15s linear; }
+.stafill.low { background: linear-gradient(180deg, #ff9d6e, #c65f2f); }
+
 .downs { font-size: 0.75rem; margin-top: 2px; color: #ffd75e; min-height: 1em; letter-spacing: 2px; }
 .fighter.right .downs { direction: rtl; }
 #hud-center { width: 90px; text-align: center; flex: none; }
@@ -124,13 +132,26 @@ input[type=text]:focus { border-color: #ffd75e; }
 #stun-note { position: absolute; top: 52%; left: 0; right: 0; text-align: center; font-size: 1.1rem;
   font-weight: bold; color: #8ecbff; text-shadow: 0 2px 6px #000; }
 
-/* guard rectangle (rounded vertical bar like a forearm) */
+/* ジャストガード成功の瞬間表示 */
+#just-note { position: absolute; top: 44%; left: 0; right: 0; text-align: center; font-size: 1.7rem;
+  font-weight: 900; font-style: italic; letter-spacing: 3px; color: #ffd75e;
+  text-shadow: 0 3px 0 #b8860b, 0 6px 16px #000c; animation: bannerpop 0.3s ease-out; }
+
+/* カウンター猶予中の常時表示 */
+#counter-note { position: absolute; top: 58%; left: 0; right: 0; text-align: center; font-size: 1rem;
+  font-weight: bold; color: #8effa9; text-shadow: 0 2px 6px #000;
+  animation: counterpulse 0.6s ease-in-out infinite alternate; }
+@keyframes counterpulse { from { opacity: 0.55; } to { opacity: 1; } }
+
+/* 防御範囲の可視化。サイズはJS側で当たり判定と同じ大きさに設定される */
 .guard-rect { position: absolute; z-index: 24; pointer-events: none;
   border-radius: 999px; background: rgba(120, 200, 255, 0.28); border: 3px solid rgba(160, 220, 255, 0.85);
   box-shadow: 0 0 18px rgba(120, 200, 255, 0.6), inset 0 0 24px rgba(255, 255, 255, 0.25);
   transform: translate(-50%, -50%); }
 .guard-rect.stunned { background: rgba(120, 120, 120, 0.2); border-color: #888a; box-shadow: none; }
 .guard-rect.blocked { background: rgba(140, 255, 160, 0.45); border-color: #b3ffc4; }
+.guard-rect.just { background: rgba(255, 215, 94, 0.5); border-color: #ffe98a;
+  box-shadow: 0 0 28px rgba(255, 215, 94, 0.95), inset 0 0 24px rgba(255, 255, 255, 0.4); }
 
 /* incoming punch telegraph */
 .telegraph { position: absolute; z-index: 24; pointer-events: none; width: 70px; height: 70px;

@@ -61,6 +61,9 @@
         <li><b>真ん中から上へスワイプ</b>: 顔面アッパー</li>
         <li><b>下から真ん中へフリック</b>: フック</li>
         <li><b>ボタンタッチ/長押し</b>: ガード(押したまま動かして相手のパンチの的に重ねる)</li>
+        <li>ガード中は<b>青い円が防御範囲</b>。円に赤い予告リングを重ねるとブロック</li>
+        <li>パンチは<b>スタミナ(黄ゲージ)を消費</b>。切れると威力半減。ガード中は回復が遅い</li>
+        <li>相手のパンチ<b>直前にガードを出す</b>と「ジャストガード」— 相手は大きくよろけ、こちらの次の一発が強化される</li>
       </ul>
     </details>
   </div>
@@ -118,6 +121,7 @@
       <div class="fighter left">
         <div class="fighter-name" id="hud-name-me"></div>
         <div class="hpbar"><div class="hpfill" id="hp-me"></div></div>
+        <div class="stabar"><div class="stafill" id="sta-me"></div></div>
         <div class="downs" id="downs-me"></div>
       </div>
       <div id="hud-center">
@@ -127,11 +131,14 @@
       <div class="fighter right">
         <div class="fighter-name" id="hud-name-opp"></div>
         <div class="hpbar rev"><div class="hpfill" id="hp-opp"></div></div>
+        <div class="stabar rev"><div class="stafill" id="sta-opp"></div></div>
         <div class="downs" id="downs-opp"></div>
       </div>
     </div>
     <div id="banner" class="hidden"></div>
     <div id="stun-note" class="hidden">ガードされた!</div>
+    <div id="just-note" class="hidden">JUST GUARD!</div>
+    <div id="counter-note" class="hidden">カウンターチャンス! 次の一発強化</div>
   </div>
   <div id="result-overlay" class="hidden">
     <div class="panel">

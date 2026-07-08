@@ -3,24 +3,57 @@ const Gesture = (() => {
   let el = null;
   let cb = {};
   let enabled = false;
-  let isAttached = false; 
-  
-  let touches = {}; 
+  let isAttached = false;
+  let stunned = false;
+
+  let touches = {};
+
+  // ガード判定サイズ。game.js側の当たり判定(±24pxマージン)込みの実効範囲を可視化する
+  const GUARD_SIZE = 120, GUARD_PAD = 24;
 
   function getSide(x) {
     return x < innerWidth / 2 ? 'L' : 'R';
   }
 
-  function getGuards(stunned) {
-    if (stunned) return [];
+  function getGuards(isStunned) {
+    if (isStunned) return [];
+    const now = performance.now();
     const res = [];
     for (const id in touches) {
       const t = touches[id];
       if (t.isGuard) {
-        res.push({ side: t.side, x: t.currX, y: t.currY, w: 120, h: 120 });
+        res.push({ side: t.side, x: t.currX, y: t.currY, w: GUARD_SIZE, h: GUARD_SIZE, age: now - t.guardAt });
       }
     }
     return res;
+  }
+
+  /* ---- 防御範囲の可視化 ---- */
+  function makeRect(t) {
+    const d = document.createElement('div');
+    d.className = 'guard-rect' + (stunned ? ' stunned' : '');
+    const size = GUARD_SIZE + GUARD_PAD * 2; // 実際にブロックできる範囲と一致させる
+    d.style.width = size + 'px';
+    d.style.height = size + 'px';
+    moveRect(d, t.currX, t.currY);
+    el.appendChild(d);
+    return d;
+  }
+
+  function moveRect(d, x, y) {
+    d.style.left = x + 'px';
+    d.style.top = y + 'px';
+  }
+
+  function beginGuard(t) {
+    t.isGuard = true;
+    t.guardAt = performance.now();
+    if (!t.rect) t.rect = makeRect(t);
+    if (cb.guardStart) cb.guardStart(t.side, t.currX / innerWidth, t.currY / innerHeight);
+  }
+
+  function dropRect(t) {
+    if (t.rect) { t.rect.remove(); t.rect = null; }
   }
 
   function attach(target, callbacks) {
@@ -40,19 +73,18 @@ const Gesture = (() => {
         startX: e.clientX, startY: e.clientY,
         currX: e.clientX, currY: e.clientY,
         side: side,
-        isGuard: isGuardBtn, // ボタンタッチなら初手からガード確定
+        isGuard: false,
+        rect: null,
+        guardAt: 0,
         fired: false
       };
-      
+
       if (isGuardBtn) {
-        if (cb.guardStart) cb.guardStart(side, e.clientX / innerWidth, e.clientY / innerHeight);
+        beginGuard(touches[e.pointerId]); // ボタンタッチなら初手からガード確定
       } else {
         touches[e.pointerId].guardTimer = setTimeout(() => {
           const t = touches[e.pointerId];
-          if (t && !t.fired && !t.isGuard) {
-            t.isGuard = true;
-            if (cb.guardStart) cb.guardStart(t.side, t.currX / innerWidth, t.currY / innerHeight);
-          }
+          if (t && !t.fired && !t.isGuard) beginGuard(t);
         }, 120);
       }
     });
@@ -66,6 +98,7 @@ const Gesture = (() => {
       t.currY = e.clientY;
       
       if (t.isGuard) {
+        if (t.rect) moveRect(t.rect, t.currX, t.currY);
         if (cb.guardMove) cb.guardMove(t.side, t.currX / innerWidth, t.currY / innerHeight);
         return;
       }
@@ -111,6 +144,7 @@ const Gesture = (() => {
       const t = touches[e.pointerId];
       if (!t) return;
       clearTimeout(t.guardTimer);
+      dropRect(t);
       if (t.isGuard) {
         if (cb.guardEnd) cb.guardEnd(t.side);
       }
@@ -130,22 +164,45 @@ const Gesture = (() => {
     });
   }
 
-  function setEnabled(v) { 
-    enabled = v; 
+  function setEnabled(v) {
+    enabled = v;
     if (!v) cancelAll();
   }
-  
-  function flashBlock(side) {}
+
+  /* ブロック成功時に防御範囲を光らせる。ジャストガードは金色 */
+  function flashBlock(side, just) {
+    for (const id in touches) {
+      const t = touches[id];
+      if (t.isGuard && t.side === side && t.rect) {
+        const rect = t.rect;
+        rect.classList.add('blocked');
+        if (just) rect.classList.add('just');
+        setTimeout(() => rect.classList.remove('blocked', 'just'), 220);
+        return;
+      }
+    }
+  }
+
+  /* スタン中はガードが無効なことを灰色表示で伝える */
+  function setStunned(v) {
+    stunned = v;
+    for (const id in touches) {
+      const t = touches[id];
+      if (t.rect) t.rect.classList.toggle('stunned', v);
+    }
+  }
 
   function cancelAll() {
     for (const id in touches) {
       clearTimeout(touches[id].guardTimer);
+      dropRect(touches[id]);
       if (touches[id].isGuard && cb.guardEnd) {
         cb.guardEnd(touches[id].side);
       }
     }
     touches = {};
+    stunned = false;
   }
 
-  return { attach, setEnabled, getGuards, flashBlock, cancelAll };
+  return { attach, setEnabled, getGuards, flashBlock, setStunned, cancelAll };
 })();
