@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>FIST FURY 3D — ボクシング</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🥊%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ 名前登録 ============ -->
+<div id="screen-name" class="screen">
+  <div class="panel">
+    <h1 class="logo">FIST FURY <span>3D</span></h1>
+    <p>リングネームを決めよう(対戦相手に表示されます)</p>
+    <input id="name-input" type="text" maxlength="12" placeholder="リングネーム (1〜12文字)">
+    <p id="name-error" class="error"></p>
+    <button id="name-ok" class="btn primary">決定</button>
+  </div>
+</div>
+
+<!-- ============ 顔ペイント ============ -->
+<div id="screen-face" class="screen hidden">
+  <div class="panel">
+    <h2>キャラクターの顔を描こう</h2>
+    <p class="sub">この顔が3Dモデルの頭に貼られます</p>
+    <canvas id="face-canvas" width="256" height="256"></canvas>
+    <div class="paint-tools">
+      <div id="face-colors" class="swatches"></div>
+      <div class="brush-sizes">
+        <button class="btn tool brush-size" data-size="4">細</button>
+        <button class="btn tool brush-size sel" data-size="10">中</button>
+        <button class="btn tool brush-size" data-size="22">太</button>
+        <button id="face-eraser" class="btn tool">消しゴム</button>
+      </div>
+      <div class="brush-sizes">
+        <button id="face-default" class="btn tool">おまかせ顔</button>
+        <button id="face-clear" class="btn tool">全消し</button>
+      </div>
+    </div>
+    <button id="face-ok" class="btn primary">この顔で決定</button>
+  </div>
+</div>
+
+<!-- ============ メインメニュー ============ -->
+<div id="screen-menu" class="screen hidden">
+  <div class="panel">
+    <h1 class="logo">FIST FURY <span>3D</span></h1>
+    <p id="menu-hello" class="sub"></p>
+    <button id="menu-cpu" class="btn primary big">CPUと対戦</button>
+    <button id="menu-online" class="btn primary big">オンライン対戦</button>
+    <button id="menu-face" class="btn">顔を描き直す</button>
+    <button id="menu-rename" class="btn">名前を変える</button>
+    <details class="howto">
+      <summary>操作方法</summary>
+      <ul>
+        <li>画面の左半分=左腕、右半分=右腕</li>
+        <li><b>タップ</b>: ストレート</li>
+        <li><b>内側へスワイプ</b>: 相手の反対側のボディ</li>
+        <li><b>真ん中から上へスワイプ</b>: 顔面アッパー</li>
+        <li><b>下から真ん中へフリック</b>: フック</li>
+        <li><b>長押し</b>: ガード(押したまま動かして相手のパンチの的に重ねる)</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<!-- ============ オンラインロビー ============ -->
+<div id="screen-online" class="screen hidden">
+  <div class="panel">
+    <h2>オンライン対戦</h2>
+    <label class="field-label">サーバーURL</label>
+    <input id="server-input" type="text" placeholder="ws://localhost:8787">
+    <label class="field-label">部屋の合言葉</label>
+    <input id="room-input" type="text" maxlength="24" placeholder="合言葉を入れて部屋に入る">
+    <p id="online-status" class="sub"></p>
+    <button id="online-join" class="btn primary">部屋に入る</button>
+    <div id="room-panel" class="hidden">
+      <h3>部屋: <span id="room-name"></span></h3>
+      <p class="sub">二人だけなら自動で試合開始。三人以上は下から対戦申請。</p>
+      <ul id="member-list"></ul>
+      <button id="online-leave" class="btn">退室する</button>
+    </div>
+    <button id="online-back" class="btn">メニューへ戻る</button>
+  </div>
+</div>
+
+<!-- ============ 対戦申請モーダル ============ -->
+<div id="challenge-modal" class="modal hidden">
+  <div class="panel small">
+    <p id="challenge-text"></p>
+    <div class="row">
+      <button id="challenge-accept" class="btn primary">受ける</button>
+      <button id="challenge-decline" class="btn">断る</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 試合画面 ============ -->
+<div id="screen-game" class="hidden">
+  <canvas id="game-canvas"></canvas>
+  <div id="vignette"></div>
+  <div id="hud">
+    <div id="hud-top">
+      <div class="fighter left">
+        <div class="fighter-name" id="hud-name-me"></div>
+        <div class="hpbar"><div class="hpfill" id="hp-me"></div></div>
+        <div class="downs" id="downs-me"></div>
+      </div>
+      <div id="hud-center">
+        <div id="hud-timer">0:00</div>
+        <div id="hud-ko">KO率 5%</div>
+      </div>
+      <div class="fighter right">
+        <div class="fighter-name" id="hud-name-opp"></div>
+        <div class="hpbar rev"><div class="hpfill" id="hp-opp"></div></div>
+        <div class="downs" id="downs-opp"></div>
+      </div>
+    </div>
+    <div id="banner" class="hidden"></div>
+    <div id="stun-note" class="hidden">ガードされた!</div>
+  </div>
+  <div id="result-overlay" class="hidden">
+    <div class="panel">
+      <h1 id="result-title"></h1>
+      <p id="result-sub"></p>
+      <button id="result-ok" class="btn primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/facepaint.js"></script>
+<script src="js/gesture.js"></script>
+<script src="js/boxer.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/net.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

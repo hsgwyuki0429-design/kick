@@ -1,0 +1,12 @@
+{
+  "name": "fist-fury-3d",
+  "version": "1.0.0",
+  "description": "3D boxing game with touch gestures, CPU and online battles",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
