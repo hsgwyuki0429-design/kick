@@ -70,6 +70,11 @@ const Game = (() => {
       this.opp = { hp: 100, downs: 0, stunUntil: 0 };
       this.timers = [];
       this.shake = 0;
+      
+      this.lastGuardSend = { L: 0, R: 0 };
+      
+      // CPUガード競合バグ防止用のID管理
+      this.cpuGuardId = 0;
 
       this.initScene(opts);
       this.initHud();
@@ -232,8 +237,8 @@ const Game = (() => {
       this.myBoxer.setGuardTarget(side, this.guardLocal(nx, ny));
       if (this.mode === 'online') {
         const now = performance.now();
-        if (isStart || now - (this.lastGuardSend || 0) > 80) {
-          this.lastGuardSend = now;
+        if (isStart || now - this.lastGuardSend[side] > 80) {
+          this.lastGuardSend[side] = now;
           this.net.game({ k: 'guard', side, on: true, nx, ny });
         }
       }
@@ -452,12 +457,20 @@ const Game = (() => {
       const side = zone === 'chestL' ? 'L' : zone === 'chestR' ? 'R' : zone === 'belly' ? (Math.random() < 0.5 ? 'L' : 'R') : 'R';
       const pos = zone === 'face' ? new THREE.Vector3(0, 1.56, 0.34)
         : zone === 'belly' ? new THREE.Vector3(0, 1.05, 0.32)
-        : zone === 'chestL' ? new THREE.Vector3(0.16, 1.35, 0.32)
-        : new THREE.Vector3(-0.16, 1.35, 0.32);
+        : zone === 'chestL' ? new THREE.Vector3(0.25, 1.35, 0.32)
+        : new THREE.Vector3(-0.25, 1.35, 0.32);
+      
       this.oppBoxer.setGuardTarget(side, pos);
+      
+      // 修正: ガード痙攣バグ防止。常に最新のタイマーIDだけが解除権限を持つ
+      const currentGuardId = ++this.cpuGuardId;
+      
       this.after(dur, () => {
-        if (this.alive && (!this.cpu.guard || this.cpu.now >= this.cpu.guard.until)) {
-          this.oppBoxer.setGuardTarget(side, null);
+        if (this.alive && this.cpuGuardId === currentGuardId) {
+          if (!this.cpu.guard || this.cpu.now >= this.cpu.guard.until) {
+            this.oppBoxer.setGuardTarget('L', null);
+            this.oppBoxer.setGuardTarget('R', null);
+          }
         }
       });
     }
@@ -476,7 +489,6 @@ const Game = (() => {
       if (!this.alive) return;
       requestAnimationFrame(this.loop);
       const now = performance.now();
-      // 裏タブ放置などでnowが飛んだ場合も、dtを最大0.05に抑えてタイムワープを防ぐ
       const dt = Math.min(0.05, (now - this.clock) / 1000);
       this.clock = now;
 
@@ -507,7 +519,6 @@ const Game = (() => {
       const look = this.oppBoxer.getHeadWorld();
       this.camera.lookAt(look.x, look.y - 0.1, look.z);
 
-      // スパーク（火花）の確実なメモリ解放
       for (let i = this.sparks.length - 1; i >= 0; i--) {
         const sp = this.sparks[i];
         sp.ttl -= dt;
@@ -515,8 +526,8 @@ const Game = (() => {
         sp.m.material.opacity = Math.max(0, sp.ttl / 0.22);
         if (sp.ttl <= 0) { 
           this.scene.remove(sp.m);
-          sp.m.geometry.dispose(); // VRAM解放
-          sp.m.material.dispose(); // VRAM解放
+          sp.m.geometry.dispose(); 
+          sp.m.material.dispose(); 
           this.sparks.splice(i, 1); 
         }
       }
@@ -528,7 +539,6 @@ const Game = (() => {
 
     after(sec, fn) { this.timers.push({ left: sec, fn }); }
 
-    // プロの現場必須：試合終了時の完全クリーンアップ処理
     destroy() {
       this.alive = false;
       this.timers = [];
@@ -543,15 +553,20 @@ const Game = (() => {
         this.net.on('opponentLeft', null);
       }
 
-      // シーン内の全オブジェクトを破棄し、メモリリークを根絶
       if (this.scene) {
         this.scene.traverse((object) => {
           if (object.isMesh) {
-            object.geometry.dispose();
-            if (object.material.isMaterial) {
-              object.material.dispose();
-            } else if (Array.isArray(object.material)) {
-              object.material.forEach(mat => mat.dispose());
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) {
+              if (Array.isArray(object.material)) {
+                object.material.forEach(mat => {
+                  if (mat.map) mat.map.dispose(); 
+                  mat.dispose();
+                });
+              } else {
+                if (object.material.map) object.material.map.dispose(); 
+                object.material.dispose();
+              }
             }
           }
         });
