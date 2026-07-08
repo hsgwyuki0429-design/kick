@@ -1,0 +1,163 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #05050a;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  color: #f2f2f2;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+#hitFlash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(200,0,0,0) 40%, rgba(160,0,0,0.55) 100%);
+  opacity: 0;
+  transition: opacity 60ms ease-out;
+  z-index: 5;
+}
+#hitFlash.show { opacity: 1; transition: none; }
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  padding: env(safe-area-inset-top, 10px) 14px 0 14px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.name { width: 46px; font-size: 12px; opacity: 0.8; text-shadow: 0 1px 2px #000; }
+.bar {
+  flex: 1;
+  height: 14px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.bar-fill { height: 100%; width: 100%; transition: width 150ms ease-out; }
+.opp-fill { background: linear-gradient(90deg, #ff5050, #ff9a3d); }
+.you-fill { background: linear-gradient(90deg, #3ddc84, #79f2c0); }
+.knockdowns { width: 42px; text-align: right; font-size: 12px; opacity: 0.85; letter-spacing: 2px; }
+
+.status-msg {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 15px;
+  min-height: 20px;
+  text-shadow: 0 1px 3px #000;
+}
+
+.block-indicator {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  font-weight: 700;
+  letter-spacing: 3px;
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: rgba(60, 140, 255, 0.25);
+  border: 1px solid rgba(120,180,255,0.7);
+  color: #cfe6ff;
+  opacity: 0;
+  transition: opacity 120ms, transform 120ms;
+}
+.block-indicator.active { opacity: 1; transform: translateX(-50%) scale(1); }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(ellipse at 50% 20%, rgba(40,20,60,0.9), rgba(5,5,10,0.96));
+}
+.overlay.hidden { display: none; }
+.overlay h1 { font-size: 30px; margin: 0 0 2px 0; letter-spacing: 1px; }
+.overlay .sub { opacity: 0.7; margin-top: -6px; margin-bottom: 10px; font-size: 13px; }
+
+.menu-section { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.howto { text-align: left; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.howto p { margin: 0 0 6px 0; font-weight: 700; opacity: 0.9; }
+.howto ul { margin: 0; padding-left: 18px; line-height: 1.6; opacity: 0.85; }
+
+.btn {
+  pointer-events: auto;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  padding: 13px 16px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:active { background: rgba(255,255,255,0.2); }
+.btn-primary {
+  background: linear-gradient(135deg, #ff4d4d, #ff8a3d);
+  border: none;
+}
+
+.room-row { display: flex; gap: 6px; }
+.room-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+.room-row .btn { padding: 12px; font-size: 13px; white-space: nowrap; }
+
+.net-status { min-height: 18px; font-size: 12px; opacity: 0.8; }
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 90px;
+  font-weight: 800;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+.countdown.hidden { display: none; }

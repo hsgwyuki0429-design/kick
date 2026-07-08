@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a12" />
+    <title>スワイプボクシング</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+
+      <!-- vignette / hit flash -->
+      <div id="hitFlash"></div>
+
+      <!-- HUD -->
+      <div id="hud">
+        <div class="bar-row opp-row">
+          <div class="name">相手</div>
+          <div class="bar"><div id="oppHpFill" class="bar-fill opp-fill"></div></div>
+          <div id="oppKnockdowns" class="knockdowns"></div>
+        </div>
+        <div class="bar-row you-row">
+          <div class="name">あなた</div>
+          <div class="bar"><div id="youHpFill" class="bar-fill you-fill"></div></div>
+          <div id="youKnockdowns" class="knockdowns"></div>
+        </div>
+        <div id="statusMsg" class="status-msg"></div>
+        <div id="blockIndicator" class="block-indicator">GUARD</div>
+      </div>
+
+      <!-- Menu / mode select overlay -->
+      <div id="menu" class="overlay">
+        <h1>スワイプボクシング</h1>
+        <p class="sub">一人称視点3Dボクシング</p>
+
+        <div class="menu-section">
+          <button id="btnOffline" class="btn btn-primary">CPU と練習 (オフライン)</button>
+        </div>
+
+        <div class="menu-section">
+          <button id="btnQuickMatch" class="btn btn-primary">オンライン対戦 (自動マッチング)</button>
+          <div class="room-row">
+            <input id="roomCodeInput" maxlength="6" placeholder="合言葉(任意)" autocapitalize="characters" />
+            <button id="btnJoinRoom" class="btn">この合言葉で対戦</button>
+          </div>
+          <div id="netStatus" class="net-status"></div>
+        </div>
+
+        <div class="menu-section howto">
+          <p>操作方法</p>
+          <ul>
+            <li>画面の左右どちらかで<b>スワイプ</b>するとパンチ</li>
+            <li>上方向スワイプ = ストレート／斜め = アッパー／横 = フック</li>
+            <li>指を<b>長押し</b>するとガード</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Game over overlay -->
+      <div id="resultOverlay" class="overlay hidden">
+        <h1 id="resultTitle">KO!</h1>
+        <p id="resultSub"></p>
+        <button id="btnRematch" class="btn btn-primary">もう一度</button>
+        <button id="btnBackToMenu" class="btn">メニューへ</button>
+      </div>
+
+      <!-- Countdown -->
+      <div id="countdown" class="countdown hidden"></div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
