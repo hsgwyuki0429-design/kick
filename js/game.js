@@ -1,4 +1,4 @@
-/* game.js — 試合本体。3Dシーン、パンチ解決、ガード判定、KO、エフェクト。 */
+/* game.js — 試合本体。3Dシーン、パンチ解決、ガード判定、KO、エフェクト、メモリ管理。 */
 
 const Sfx = (() => {
   let ctx = null;
@@ -33,12 +33,11 @@ const Sfx = (() => {
 const Game = (() => {
   let renderer = null;
 
-  // 画面上のガードアンカー位置 (自分視点)
   const ANCHORS = {
     face:   [0.5,  1/6],
     belly:  [0.5,  5/6],
-    chestL: [0.25, 0.5], // 画面左側 (＝自分の左胸)
-    chestR: [0.75, 0.5]  // 画面右側 (＝自分の右胸)
+    chestL: [0.25, 0.5],
+    chestR: [0.75, 0.5]
   };
 
   function anchorPx(zone) {
@@ -47,12 +46,10 @@ const Game = (() => {
   }
 
   function targetZone(type, side) {
-    // まっすぐ打つストレートは、相手の対角の胸に当たる（自分の左腕 L → 相手の右胸 chestR）
     if (type === 'straight') return side === 'L' ? 'chestR' : 'chestL';
-    // 内側へスワイプするボディは、クロスして相手の同じ側の胸に当たる（左腕 L → 相手の左胸 chestL）
     if (type === 'body')     return side === 'L' ? 'chestL' : 'chestR';
-    if (type === 'hook')     return 'belly'; // 腹
-    return 'face';                           // 顔
+    if (type === 'hook')     return 'belly';
+    return 'face';
   }
 
   function koChance(prevDowns, elapsedSec) {
@@ -97,8 +94,8 @@ const Game = (() => {
     initScene(opts) {
       const canvas = document.getElementById('game-canvas');
       if (!renderer) {
-        renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       }
       renderer.setSize(innerWidth, innerHeight);
 
@@ -133,11 +130,12 @@ const Game = (() => {
 
       this.sparks = [];
       this.onResize = () => {
+        if (!this.alive) return;
         renderer.setSize(innerWidth, innerHeight);
         this.camera.aspect = innerWidth / innerHeight;
         this.camera.updateProjectionMatrix();
       };
-      addEventListener('resize', this.onResize);
+      window.addEventListener('resize', this.onResize);
     }
 
     buildRing() {
@@ -221,11 +219,16 @@ const Game = (() => {
     }
 
     guardLocal(nx, ny) {
-      return new THREE.Vector3((0.5 - nx) * 1.2, 1.35 + (0.5 - ny) * 1.2, 0.36);
+      const localX = (0.5 - nx) * 1.2; 
+      const localY = 1.7 - ny * 1.0;
+      const localZ = 0.35 + (0.5 - Math.abs(0.5 - ny)) * 0.1;
+      return new THREE.Vector3(localX, localY, localZ);
     }
 
     onMyGuard(side, nx, ny, isStart) {
-      if (this.state !== 'fight' && this.state !== 'down') return;
+      if (this.state !== 'fight') return;
+      if (performance.now() < this.me.stunUntil) return;
+
       this.myBoxer.setGuardTarget(side, this.guardLocal(nx, ny));
       if (this.mode === 'online') {
         const now = performance.now();
@@ -257,12 +260,21 @@ const Game = (() => {
     }
 
     applyBlockedByOpp(side) {
-      this.me.stunUntil = performance.now() + 200;
+      this.me.stunUntil = performance.now() + 900;
       Sfx.block();
       this.spark(this.myBoxer.getGloveWorld(side), 0x88ccff);
       const note = document.getElementById('stun-note');
       note.classList.remove('hidden');
-      this.after(0.5, () => note.classList.add('hidden'));
+      this.after(0.9, () => note.classList.add('hidden'));
+
+      Gesture.cancelAll(); // 強制キャンセル
+
+      this.myBoxer.setGuardTarget('L', null);
+      this.myBoxer.setGuardTarget('R', null);
+      if (this.mode === 'online') {
+        this.net.game({ k: 'guard', side: 'L', on: false });
+        this.net.game({ k: 'guard', side: 'R', on: false });
+      }
     }
 
     applyHitOnOpp(dmg, side, hpFromNet = null) {
@@ -298,15 +310,21 @@ const Game = (() => {
       const p = anchorPx(zone);
       const stunned = performance.now() < this.me.stunUntil;
       const g = Gesture.getGuards(stunned).find(r =>
-        // 遊びやすさの究極の微調整: 判定に余裕を持たせ、指が少しずれてもガード成功とする (+24px)
         Math.abs(p.x - r.x) < r.w / 2 + 24 && Math.abs(p.y - r.y) < r.h / 2 + 24
       );
       if (g) {
         Gesture.flashBlock(g.side);
         Sfx.block();
         this.spark(this.oppBoxer.getGloveWorld(side), 0x88ccff);
-        if (this.mode === 'cpu') { this.opp.stunUntil = performance.now() + 200; this.cpu.onStunned(); }
-        else this.net.game({ k: 'result', blocked: true, side });
+        
+        if (this.mode === 'cpu') { 
+          this.opp.stunUntil = performance.now() + 900; 
+          this.cpu.onStunned();
+          this.oppBoxer.setGuardTarget('L', null);
+          this.oppBoxer.setGuardTarget('R', null);
+        } else {
+          this.net.game({ k: 'result', blocked: true, side });
+        }
       } else {
         this.takeDamage(spec.dmg);
         if (this.mode === 'online') this.net.game({ k: 'result', blocked: false, hp: this.me.hp, side });
@@ -335,6 +353,9 @@ const Game = (() => {
       const tko = who.downs >= 4;
       const ko = tko || Math.random() < chance;
       this.state = 'down';
+      
+      Gesture.cancelAll(); // ダウンしたらガード等も強制解除
+
       boxer.setDown(true);
       Sfx.down();
       this.banner('DOWN!');
@@ -365,6 +386,8 @@ const Game = (() => {
       this.state = 'over';
       this.banner(how || 'KO');
       Gesture.setEnabled(false);
+      Gesture.cancelAll();
+      
       this.after(1.6, () => {
         this.banner(null);
         document.getElementById('result-title').textContent = result === 'win' ? 'YOU WIN!' : 'YOU LOSE...';
@@ -453,6 +476,7 @@ const Game = (() => {
       if (!this.alive) return;
       requestAnimationFrame(this.loop);
       const now = performance.now();
+      // 裏タブ放置などでnowが飛んだ場合も、dtを最大0.05に抑えてタイムワープを防ぐ
       const dt = Math.min(0.05, (now - this.clock) / 1000);
       this.clock = now;
 
@@ -483,12 +507,18 @@ const Game = (() => {
       const look = this.oppBoxer.getHeadWorld();
       this.camera.lookAt(look.x, look.y - 0.1, look.z);
 
+      // スパーク（火花）の確実なメモリ解放
       for (let i = this.sparks.length - 1; i >= 0; i--) {
         const sp = this.sparks[i];
         sp.ttl -= dt;
         sp.m.scale.multiplyScalar(1 + dt * 14);
         sp.m.material.opacity = Math.max(0, sp.ttl / 0.22);
-        if (sp.ttl <= 0) { this.scene.remove(sp.m); this.sparks.splice(i, 1); }
+        if (sp.ttl <= 0) { 
+          this.scene.remove(sp.m);
+          sp.m.geometry.dispose(); // VRAM解放
+          sp.m.material.dispose(); // VRAM解放
+          this.sparks.splice(i, 1); 
+        }
       }
 
       if ((this.state === 'fight' || this.state === 'down')) this.updateHud();
@@ -498,14 +528,34 @@ const Game = (() => {
 
     after(sec, fn) { this.timers.push({ left: sec, fn }); }
 
+    // プロの現場必須：試合終了時の完全クリーンアップ処理
     destroy() {
       this.alive = false;
+      this.timers = [];
       Gesture.setEnabled(false);
-      removeEventListener('resize', this.onResize);
+      Gesture.cancelAll();
+      
+      window.removeEventListener('resize', this.onResize);
       document.querySelectorAll('.telegraph').forEach(e => e.remove());
+      
       if (this.net) {
         this.net.on('game', null);
         this.net.on('opponentLeft', null);
+      }
+
+      // シーン内の全オブジェクトを破棄し、メモリリークを根絶
+      if (this.scene) {
+        this.scene.traverse((object) => {
+          if (object.isMesh) {
+            object.geometry.dispose();
+            if (object.material.isMaterial) {
+              object.material.dispose();
+            } else if (Array.isArray(object.material)) {
+              object.material.forEach(mat => mat.dispose());
+            }
+          }
+        });
+        renderer.clear();
       }
     }
   }
