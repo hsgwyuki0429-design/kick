@@ -1,35 +1,37 @@
-/* gesture.js — 2本指タッチ操作 (要件③⑥)
- * 画面左半分 = 左腕 / 右半分 = 右腕。各半分につき同時に1本の指。
- *  - タップ ............... ストレート
- *  - 内側へのサイドスワイプ . 相手の反対側の胸へのボディ
- *  - 真ん中から上スワイプ ... 顔面(アッパー)
- *  - 下から真ん中へ上フリック フック
- *  - 長押し(押している間) .. ガード。角の取れた縦長の矩形が指に追従する
- */
+/* gesture.js — 2本指タッチ操作と攻撃種類の判定 */
 const Gesture = (() => {
   const HOLD_MS = 160;      // これ以上押しっぱなしでガード開始
   const GUARD_MOVE_PX = 22; // ガード判定を壊さない指ブレ許容量
   const SWIPE_PX = 42;      // スワイプ確定距離
 
   let root = null, cb = {}, enabled = false;
-  const pointers = new Map();   // pointerId -> state
-  const guards = { L: null, R: null }; // side -> {x,y,el}
+  const pointers = new Map();
+  const guards = { L: null, R: null };
 
   function rectSize() {
     const w = Math.max(64, Math.min(innerWidth, innerHeight) * 0.16);
     return { w, h: w * 2.5 };
   }
 
+  // スワイプの種類を判定
   function classifySwipe(p) {
     const dx = p.x - p.x0, dy = p.y - p.y0;
     const h = innerHeight;
-    if (Math.abs(dy) >= Math.abs(dx) && dy < 0) {
-      // 上方向: 開始位置が下寄りならフック、真ん中付近なら顔面アッパー
-      return p.y0 > h * 0.62 ? 'hook' : 'uppercut';
-    }
     const inward = (p.side === 'L' && dx > 0) || (p.side === 'R' && dx < 0);
+
+    // 上方向へのスワイプ
+    if (Math.abs(dy) >= Math.abs(dx) && dy < 0) {
+      // 画面の縦半分より下から開始した場合は腹へのフック
+      if (p.y0 > h * 0.5) return 'hook';
+      // 画面の縦半分より上から開始した場合は顔面アッパー
+      return 'uppercut';
+    }
+
+    // 内側へのスワイプは反対側の胸へのボディ
     if (inward && Math.abs(dx) > Math.abs(dy)) return 'body';
-    return 'straight'; // 外側/下方向スワイプはストレート扱い
+
+    // それ以外(外側など)のスワイプはストレート扱い
+    return 'straight';
   }
 
   function startGuard(p) {
@@ -57,7 +59,7 @@ const Gesture = (() => {
   function onDown(e) {
     if (!enabled) return;
     const side = e.clientX < innerWidth / 2 ? 'L' : 'R';
-    for (const p of pointers.values()) if (p.side === side) return; // 片側1本まで
+    for (const p of pointers.values()) if (p.side === side) return;
     const p = {
       id: e.pointerId, side,
       x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
@@ -103,7 +105,7 @@ const Gesture = (() => {
     if (p.mode === 'guard') {
       endGuard(p.side);
     } else if (p.mode === 'pending') {
-      // 短押し = タップ = ストレート
+      // 短押し(タップ)はストレート
       cb.punch && cb.punch(p.side, dist(p) > SWIPE_PX ? classifySwipe(p) : 'straight');
     }
   }
@@ -126,7 +128,6 @@ const Gesture = (() => {
     }
   }
 
-  /* ガード矩形の当たり判定 (px)。stunned の腕は無効。 */
   function getGuards(stunned) {
     const { w, h } = rectSize();
     const out = [];
