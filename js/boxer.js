@@ -125,11 +125,31 @@ const Boxer = (() => {
       const s = arm.sideSign;
       const ctrl = mid.clone();
 
+      // 各パンチの自然な軌道を作るための制御点調整
       switch (type) {
-        case 'straight': ctrl.y += 0.02; break; 
-        case 'hook':     ctrl.x += s * 0.40; ctrl.y -= 0.10; ctrl.z += 0.10; break;
-        case 'uppercut': ctrl.x += s * 0.10; ctrl.y -= 0.42; ctrl.z += 0.15; break;
-        case 'body':     ctrl.x += s * 0.38; ctrl.y -= 0.18; ctrl.z += 0.05; break; 
+        case 'straight': 
+          // まっすぐ打ち出す
+          ctrl.y += 0.05; 
+          ctrl.x += s * 0.05; 
+          break; 
+        case 'body': // クロス
+          // 内側を通りつつ下へえぐる
+          ctrl.x -= s * 0.15; 
+          ctrl.y -= 0.10; 
+          ctrl.z += 0.05; 
+          break; 
+        case 'hook':     
+          // 外側から大きく回る
+          ctrl.x += s * 0.35; 
+          ctrl.y += 0.05; 
+          ctrl.z += 0.10; 
+          break;
+        case 'uppercut': 
+          // 下から突き上げる
+          ctrl.x += s * 0.05; 
+          ctrl.y -= 0.30; 
+          ctrl.z += 0.10; 
+          break;
       }
       arm.mode = 'punch';
       arm.punch = { type, spec, t: 0, start, target, ctrl, fired: false, onImpact, onDone };
@@ -211,13 +231,14 @@ const Boxer = (() => {
       }
     }
 
-    // 攻撃対象部位のワールド座標 (被弾者本人のローカル基準に固定)
+    // 攻撃対象部位のワールド座標
     function getZonePos(zone) {
-      if (zone === 'face')   return body.localToWorld(_v1.set(0, 1.60, 0.14).clone());
-      if (zone === 'belly')  return body.localToWorld(_v1.set(0, 1.05, 0.16).clone());
+      // 相手からの顔面への攻撃が「カメラの真ん中」に来るように y, z をカメラ位置付近に合わせる
+      if (zone === 'face')   return body.localToWorld(_v1.set(0, 1.62, 0.20).clone());
+      if (zone === 'belly')  return body.localToWorld(_v1.set(0, 1.10, 0.18).clone());
       // chestL は本人の左胸 (ローカル+x)、chestR は本人の右胸 (ローカル-x)
-      if (zone === 'chestL') return body.localToWorld(_v1.set(0.13, 1.35, 0.16).clone());
-      return body.localToWorld(_v1.set(-0.13, 1.35, 0.16).clone());
+      if (zone === 'chestL') return body.localToWorld(_v1.set(0.16, 1.35, 0.18).clone());
+      return body.localToWorld(_v1.set(-0.16, 1.35, 0.18).clone());
     }
 
     function getHeadWorld() {
