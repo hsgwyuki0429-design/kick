@@ -66,16 +66,26 @@
   }
 
   /* ---------- オンライン (要件⑧) ---------- */
-  function defaultServerUrl() {
-    const saved = localStorage.getItem('ff3d_server');
-    if (saved) return saved;
+  // http/https でこのページを開いていれば、配信元サーバー = 対戦サーバーなので
+  // URLは自動決定して変更不可にする(誤って変えると相手と別サーバーになるため)。
+  // file:// 等で開いた場合だけ手入力欄を出す。
+  function autoServerUrl() {
     if (location.protocol === 'https:') return 'wss://' + location.host;
     if (location.protocol === 'http:') return 'ws://' + location.host;
-    return 'ws://localhost:8787';
+    return null;
   }
 
   function openOnline() {
-    $('server-input').value = defaultServerUrl();
+    const auto = autoServerUrl();
+    if (auto) {
+      $('server-auto-url').textContent = auto;
+      $('server-auto').classList.remove('hidden');
+      $('server-manual').classList.add('hidden');
+    } else {
+      $('server-auto').classList.add('hidden');
+      $('server-manual').classList.remove('hidden');
+      $('server-input').value = localStorage.getItem('ff3d_server') || 'ws://localhost:8787';
+    }
     $('online-status').textContent = '';
     $('room-panel').classList.add('hidden');
     show('screen-online');
@@ -166,11 +176,12 @@
 
   function initOnline() {
     $('online-join').addEventListener('click', async () => {
-      const url = $('server-input').value.trim();
+      const auto = autoServerUrl();
+      const url = auto || $('server-input').value.trim();
       const pass = $('room-input').value.trim();
       if (!url) { status('サーバーURLを入力してください'); return; }
       if (!pass) { status('部屋の合言葉を入力してください'); return; }
-      localStorage.setItem('ff3d_server', url);
+      if (!auto) localStorage.setItem('ff3d_server', url);
 
       if (!net || !net.connected) {
         status('接続中…');

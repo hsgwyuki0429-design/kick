@@ -70,8 +70,15 @@
 <div id="screen-online" class="screen hidden">
   <div class="panel">
     <h2>オンライン対戦</h2>
-    <label class="field-label">サーバーURL</label>
-    <input id="server-input" type="text" placeholder="ws://localhost:8787">
+    <div id="server-auto" class="hidden">
+      <label class="field-label">サーバー</label>
+      <p id="server-auto-url" class="server-fixed"></p>
+      <p class="sub">このページを開いているサーバーに自動で接続します。<br>対戦相手にも同じURLでこのページを開いてもらってください。</p>
+    </div>
+    <div id="server-manual" class="hidden">
+      <label class="field-label">サーバーURL</label>
+      <input id="server-input" type="text" placeholder="ws://localhost:8787">
+    </div>
     <label class="field-label">部屋の合言葉</label>
     <input id="room-input" type="text" maxlength="24" placeholder="合言葉を入れて部屋に入る">
     <p id="online-status" class="sub"></p>
