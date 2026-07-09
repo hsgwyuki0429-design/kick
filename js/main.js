@@ -1,4 +1,4 @@
-/* main.js — 画面遷移 / 名前登録(要件⑨) / メニュー / オンラインロビー(要件⑧) */
+/* main.js — 画面遷移 / 名前登録 / メニュー / オンラインロビー / 設定(ボタン式・スワイプ式) */
 (() => {
   let name = localStorage.getItem('ff3d_name') || '';
   let net = null;
@@ -13,7 +13,7 @@
     $(id).classList.remove('hidden');
   }
 
-  /* ---------- 名前 (要件⑨: 対戦時に表示、重複はサーバーが禁止) ---------- */
+  /* ---------- 名前 ---------- */
   function initName() {
     $('name-input').value = name;
     $('name-ok').addEventListener('click', () => {
@@ -30,7 +30,7 @@
     });
   }
 
-  /* ---------- 顔ペイント (要件⑩) ---------- */
+  /* ---------- 顔ペイント ---------- */
   function initFace() {
     FacePaint.init();
     $('face-ok').addEventListener('click', () => {
@@ -52,7 +52,57 @@
     $('menu-rename').addEventListener('click', () => show('screen-name'));
   }
 
-  /* ---------- CPU戦 (要件②) ---------- */
+  /* ---------- 設定 (要件: 操作モードとボタンサイズ) ---------- */
+  let controlsMode = localStorage.getItem('ff3d_controls') || 'button';
+  let btnSize = parseInt(localStorage.getItem('ff3d_btnSize') || '70', 10);
+
+  function initSettings() {
+    $('menu-settings').addEventListener('click', () => {
+      $('setting-btn-size').value = btnSize;
+      updateCtrlButtons();
+      show('screen-settings');
+    });
+
+    $('setting-ctrl-btn').addEventListener('click', () => {
+      controlsMode = 'button';
+      updateCtrlButtons();
+    });
+    $('setting-ctrl-swipe').addEventListener('click', () => {
+      controlsMode = 'swipe';
+      updateCtrlButtons();
+    });
+
+    $('setting-ok').addEventListener('click', () => {
+      btnSize = parseInt($('setting-btn-size').value, 10);
+      localStorage.setItem('ff3d_controls', controlsMode);
+      localStorage.setItem('ff3d_btnSize', btnSize);
+      applySettings();
+      showMenu();
+    });
+  }
+
+  function updateCtrlButtons() {
+    $('setting-ctrl-btn').classList.toggle('primary', controlsMode === 'button');
+    $('setting-ctrl-swipe').classList.toggle('primary', controlsMode === 'swipe');
+  }
+
+  function applySettings() {
+    document.documentElement.style.setProperty('--btn-size', btnSize + 'px');
+    Gesture.setMode(controlsMode);
+    
+    // UIの切り替え
+    if (controlsMode === 'button') {
+      $('game-buttons').classList.remove('hidden');
+      $('guard-btn-l').classList.add('hidden');
+      $('guard-btn-r').classList.add('hidden');
+    } else {
+      $('game-buttons').classList.add('hidden');
+      $('guard-btn-l').classList.remove('hidden');
+      $('guard-btn-r').classList.remove('hidden');
+    }
+  }
+
+  /* ---------- CPU戦 ---------- */
   function startCpuMatch() {
     show('screen-game');
     match = new Game.Match({
@@ -65,7 +115,7 @@
     });
   }
 
-  /* ---------- オンライン (要件⑧) ---------- */
+  /* ---------- オンライン ---------- */
   function autoServerUrl() {
     if (location.protocol === 'https:') return 'wss://' + location.host;
     if (location.protocol === 'http:') return 'ws://' + location.host;
@@ -187,7 +237,6 @@
           await net.connect(url, name);
         } catch (e) {
           if (e.message === 'nameTaken') {
-            // エラーメッセージを修正：合言葉のエラーだと勘違いさせないようにする
             status(`リングネーム「${name}」は現在他の人が使用中です。一度メニューに戻り「名前を変える」から変更してください。`);
           } else if (e.message === 'badName') {
             status('リングネームが不正です。メニューに戻って名前を変更してください。');
@@ -218,11 +267,17 @@
   }
 
   /* ---------- 起動 ---------- */
+  // 画面のダブルタップズームを完全に防止
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+
   addEventListener('pointerdown', () => Sfx.unlock(), { once: true });
   initName();
   initFace();
+  initSettings();
   initMenu();
   initOnline();
+  applySettings(); // 起動時に設定を適用
+  
   if (name) showMenu();
   else show('screen-name');
 })();
