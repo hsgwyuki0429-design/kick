@@ -49,19 +49,20 @@
     $('menu-cpu').addEventListener('click', startCpuMatch);
     $('menu-online').addEventListener('click', openOnline);
     $('menu-face').addEventListener('click', () => show('screen-face'));
+    $('menu-settings').addEventListener('click', () => show('screen-settings'));
     $('menu-rename').addEventListener('click', () => show('screen-name'));
   }
 
-  /* ---------- 設定 (要件: 操作モードとボタンサイズ) ---------- */
+  /* ---------- 設定 (操作モードとボタンサイズ) ---------- */
   let controlsMode = localStorage.getItem('ff3d_controls') || 'button';
-  let btnSize = parseInt(localStorage.getItem('ff3d_btnSize') || '70', 10);
+  
+  // 修正: NaNによってCSSのレイアウトが完全に崩れ、描画されなくなるバグを防止
+  let btnSize = parseInt(localStorage.getItem('ff3d_btnSize'), 10);
+  if (isNaN(btnSize) || btnSize < 40) btnSize = 70;
 
   function initSettings() {
-    $('menu-settings').addEventListener('click', () => {
-      $('setting-btn-size').value = btnSize;
-      updateCtrlButtons();
-      show('screen-settings');
-    });
+    $('setting-btn-size').value = btnSize;
+    updateCtrlButtons();
 
     $('setting-ctrl-btn').addEventListener('click', () => {
       controlsMode = 'button';
@@ -74,6 +75,7 @@
 
     $('setting-ok').addEventListener('click', () => {
       btnSize = parseInt($('setting-btn-size').value, 10);
+      if (isNaN(btnSize)) btnSize = 70;
       localStorage.setItem('ff3d_controls', controlsMode);
       localStorage.setItem('ff3d_btnSize', btnSize);
       applySettings();
@@ -90,7 +92,6 @@
     document.documentElement.style.setProperty('--btn-size', btnSize + 'px');
     Gesture.setMode(controlsMode);
     
-    // UIの切り替え
     if (controlsMode === 'button') {
       $('game-buttons').classList.remove('hidden');
       $('guard-btn-l').classList.add('hidden');
@@ -267,7 +268,6 @@
   }
 
   /* ---------- 起動 ---------- */
-  // 画面のダブルタップズームを完全に防止
   document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 
   addEventListener('pointerdown', () => Sfx.unlock(), { once: true });
@@ -276,7 +276,7 @@
   initSettings();
   initMenu();
   initOnline();
-  applySettings(); // 起動時に設定を適用
+  applySettings();
   
   if (name) showMenu();
   else show('screen-name');
