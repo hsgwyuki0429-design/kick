@@ -168,3 +168,14 @@ input[type=text]:focus { border-color: #ffd75e; }
 #result-overlay { position: absolute; inset: 0; z-index: 40; background: #000b;
   display: flex; align-items: center; justify-content: center; }
 #result-title { font-size: 2.6rem; font-style: italic; color: #ffd75e; text-shadow: 0 4px 0 #b8860b; }
+/* --- render干渉・FPS低下対策 (GPUアクセラレーションの強制) --- */
+/* WebGL(Canvas)とUIの描画レイヤーを完全に分離し、処理落ちを防ぐ */
+#game-buttons, 
+#hud, 
+#vignette, 
+.guard-btn,
+.aim-flash,
+.telegraph {
+  transform: translateZ(0);
+  will-change: transform;
+}
