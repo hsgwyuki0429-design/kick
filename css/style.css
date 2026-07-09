@@ -1,16 +1,25 @@
-/* 修正: 画面全体のテキスト選択・青いハイライトを無効化しつつ、iOSのバウンスを防止 */
+:root {
+  --btn-size: 70px; /* 攻撃ボタンの大きさのデフォルト */
+}
+
+/* 画面全体のテキスト選択・青いハイライトを無効化しつつ、iOSのバウンスを防止 */
 body, html {
   width: 100%; height: 100%; overflow: hidden; background: #0d0f1a; color: #eee;
   font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent; 
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* 入力欄のみテキスト選択を許可 (iPhone等で入力できなくなるバグを防止) */
 input, textarea { -webkit-user-select: auto !important; user-select: auto !important; }
 
 .hidden { display: none !important; }
+
+#version {
+  position: fixed; bottom: 8px; right: 8px; color: rgba(255, 255, 255, 0.4);
+  font-size: 0.75rem; font-weight: bold; z-index: 100; pointer-events: none;
+}
 
 /* ---------- screens ---------- */
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -26,6 +35,9 @@ p { margin: 8px 0; }
 .sub { color: #9aa4c8; font-size: 0.88rem; }
 .error { color: #ff7070; font-size: 0.85rem; min-height: 1.2em; }
 .field-label { display: block; text-align: left; font-size: 0.8rem; color: #9aa4c8; margin: 10px 0 4px; }
+
+.mt-3 { margin-top: 15px; }
+.mt-4 { margin-top: 25px; }
 
 input[type=text] { width: 100%; padding: 12px; font-size: 1rem; border-radius: 10px; border: 2px solid #39406b;
   background: #141830; color: #fff; outline: none; }
@@ -43,7 +55,7 @@ input[type=text]:focus { border-color: #ffd75e; }
 .btn.tool { width: auto; display: inline-block; padding: 8px 12px; margin: 4px; font-size: 0.85rem; }
 .btn.tool.sel { outline: 3px solid #ffd75e; }
 .row { display: flex; gap: 10px; }
-.row .btn { flex: 1; }
+.row .btn { flex: 1; margin-top: 0; }
 
 .howto { margin-top: 18px; text-align: left; color: #9aa4c8; font-size: 0.85rem; }
 .howto summary { cursor: pointer; text-align: center; }
@@ -67,19 +79,17 @@ input[type=text]:focus { border-color: #ffd75e; }
 .modal { position: fixed; inset: 0; z-index: 60; background: #000a; display: flex; align-items: center; justify-content: center; }
 
 /* ---------- game ---------- */
-/* 修正: ゲーム画面全体をタッチ操作のブラウザデフォルト無効に指定し、画面揺れを完全防止 */
 #screen-game { position: fixed; inset: 0; z-index: 20; touch-action: none; }
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 22;
   box-shadow: inset 0 0 18vmin 6vmin rgba(255, 0, 0, 0.85); transition: opacity 0.35s ease-out; }
 
-/* ガード専用ボタン
-   ※見た目は70pxで邪魔にならないようにしつつ、擬似要素で見えないタッチ判定エリアを120pxに拡大（誤タップ防止） */
+/* ---- スワイプ用 防御ボタン ---- */
 .guard-btn {
   position: absolute;
   width: 70px; height: 70px;
-  margin: -35px 0 0 -35px; /* 中心位置に揃える */
+  margin: -35px 0 0 -35px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.12);
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -87,35 +97,69 @@ input[type=text]:focus { border-color: #ffd75e; }
   z-index: 23;
   touch-action: none;
 }
-.guard-btn::before {
-  content: "";
-  position: absolute;
-  top: -25px; left: -25px; right: -25px; bottom: -25px;
-  border-radius: 50%;
-}
-/* 1/3 (33.33%) と 2/3 (66.66%)。縦は50% */
+.guard-btn::before { content: ""; position: absolute; top: -25px; left: -25px; right: -25px; bottom: -25px; border-radius: 50%; }
 #guard-btn-l { left: 33.33%; top: 50%; }
 #guard-btn-r { left: 66.66%; top: 50%; }
 
+/* ---- ボタン式用 十字攻撃ボタン ---- */
+#game-buttons {
+  position: absolute; inset: 0; pointer-events: none; z-index: 23;
+}
+.atk-btn-grp {
+  position: absolute; bottom: 8%; width: calc(var(--btn-size) * 3); height: calc(var(--btn-size) * 3); pointer-events: none;
+}
+.atk-btn-grp.left { left: 4%; }
+.atk-btn-grp.right { right: 4%; }
+
+.atk-btn {
+  position: absolute; width: var(--btn-size); height: var(--btn-size); border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.2); box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.1);
+  touch-action: none; pointer-events: auto;
+}
+.atk-btn::before { content: ""; position: absolute; top: -15px; left: -15px; right: -15px; bottom: -15px; border-radius: 50%; }
+.atk-btn:active { background: rgba(255, 255, 255, 0.35); }
+
+/* ボタンのアイコン追加 (上=ストレート、下=ボディ、外=フック、内=アッパー) */
+.atk-btn::after {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; color: rgba(255, 255, 255, 0.35); pointer-events: none;
+}
+
+/* 左手十字 */
+.atk-btn-grp.left .top { top: 0; left: var(--btn-size); }
+.atk-btn-grp.left .top::after { content: "▲"; }
+.atk-btn-grp.left .bottom { top: calc(var(--btn-size) * 2); left: var(--btn-size); }
+.atk-btn-grp.left .bottom::after { content: "▼"; }
+.atk-btn-grp.left .outer { top: var(--btn-size); left: 0; }
+.atk-btn-grp.left .outer::after { content: "◀"; }
+.atk-btn-grp.left .inner { top: var(--btn-size); left: calc(var(--btn-size) * 2); }
+.atk-btn-grp.left .inner::after { content: "▶"; }
+
+/* 右手十字 */
+.atk-btn-grp.right .top { top: 0; left: var(--btn-size); }
+.atk-btn-grp.right .top::after { content: "▲"; }
+.atk-btn-grp.right .bottom { top: calc(var(--btn-size) * 2); left: var(--btn-size); }
+.atk-btn-grp.right .bottom::after { content: "▼"; }
+.atk-btn-grp.right .inner { top: var(--btn-size); left: 0; }
+.atk-btn-grp.right .inner::after { content: "◀"; }
+.atk-btn-grp.right .outer { top: var(--btn-size); left: calc(var(--btn-size) * 2); }
+.atk-btn-grp.right .outer::after { content: "▶"; }
+
+/* ---- HUD類 ---- */
 #hud { position: absolute; inset: 0; pointer-events: none; z-index: 24; }
 #hud-top { display: flex; align-items: flex-start; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 10px 0; }
 .fighter { flex: 1; }
 .fighter.right { text-align: right; }
-.fighter-name { font-size: 0.85rem; font-weight: bold; text-shadow: 0 1px 3px #000; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; }
-.hpbar { height: 14px; margin-top: 3px; border-radius: 7px; background: #000a; border: 1px solid #fff5;
-  overflow: hidden; }
-.hpfill { height: 100%; width: 100%; border-radius: 6px; background: linear-gradient(180deg, #7cff6e, #2fbf3a);
-  transition: width 0.25s ease-out; }
+.fighter-name { font-size: 0.85rem; font-weight: bold; text-shadow: 0 1px 3px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hpbar { height: 14px; margin-top: 3px; border-radius: 7px; background: #000a; border: 1px solid #fff5; overflow: hidden; }
+.hpfill { height: 100%; width: 100%; border-radius: 6px; background: linear-gradient(180deg, #7cff6e, #2fbf3a); transition: width 0.25s ease-out; }
 .hpfill.warn { background: linear-gradient(180deg, #ffd75e, #e0a52c); }
 .hpfill.danger { background: linear-gradient(180deg, #ff6e6e, #c62f2f); }
 .hpbar.rev { direction: rtl; }
 
-/* スタミナゲージ(パンチで消費、ガード中は回復が遅い) */
 .stabar { height: 7px; margin-top: 2px; border-radius: 4px; background: #000a; border: 1px solid #fff3; overflow: hidden; }
 .stabar.rev { direction: rtl; }
-.stafill { height: 100%; width: 100%; border-radius: 3px; background: linear-gradient(180deg, #ffe98a, #e0b52c);
-  transition: width 0.15s linear; }
+.stafill { height: 100%; width: 100%; border-radius: 3px; background: linear-gradient(180deg, #ffe98a, #e0b52c); transition: width 0.15s linear; }
 .stafill.low { background: linear-gradient(180deg, #ff9d6e, #c65f2f); }
 
 .downs { font-size: 0.75rem; margin-top: 2px; color: #ffd75e; min-height: 1em; letter-spacing: 2px; }
@@ -132,18 +176,15 @@ input[type=text]:focus { border-color: #ffd75e; }
 #stun-note { position: absolute; top: 52%; left: 0; right: 0; text-align: center; font-size: 1.1rem;
   font-weight: bold; color: #8ecbff; text-shadow: 0 2px 6px #000; }
 
-/* ジャストガード成功の瞬間表示 */
 #just-note { position: absolute; top: 44%; left: 0; right: 0; text-align: center; font-size: 1.7rem;
   font-weight: 900; font-style: italic; letter-spacing: 3px; color: #ffd75e;
   text-shadow: 0 3px 0 #b8860b, 0 6px 16px #000c; animation: bannerpop 0.3s ease-out; }
 
-/* カウンター猶予中の常時表示 */
 #counter-note { position: absolute; top: 58%; left: 0; right: 0; text-align: center; font-size: 1rem;
   font-weight: bold; color: #8effa9; text-shadow: 0 2px 6px #000;
   animation: counterpulse 0.6s ease-in-out infinite alternate; }
 @keyframes counterpulse { from { opacity: 0.55; } to { opacity: 1; } }
 
-/* 防御範囲の可視化。サイズはJS側で当たり判定と同じ大きさに設定される */
 .guard-rect { position: absolute; z-index: 24; pointer-events: none;
   border-radius: 999px; background: rgba(120, 200, 255, 0.28); border: 3px solid rgba(160, 220, 255, 0.85);
   box-shadow: 0 0 18px rgba(120, 200, 255, 0.6), inset 0 0 24px rgba(255, 255, 255, 0.25);
@@ -153,13 +194,11 @@ input[type=text]:focus { border-color: #ffd75e; }
 .guard-rect.just { background: rgba(255, 215, 94, 0.5); border-color: #ffe98a;
   box-shadow: 0 0 28px rgba(255, 215, 94, 0.95), inset 0 0 24px rgba(255, 255, 255, 0.4); }
 
-/* 自分のパンチの狙い先表示(タッチ位置から決まった部位に一瞬光る) */
 .aim-flash { position: absolute; z-index: 24; pointer-events: none; width: 44px; height: 44px;
   margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid rgba(255, 230, 120, 0.95);
   box-shadow: 0 0 12px rgba(255, 220, 100, 0.8); animation: aimpop 0.35s ease-out forwards; }
 @keyframes aimpop { 0% { transform: scale(1.7); opacity: 1; } 100% { transform: scale(0.7); opacity: 0; } }
 
-/* incoming punch telegraph */
 .telegraph { position: absolute; z-index: 24; pointer-events: none; width: 70px; height: 70px;
   margin: -35px 0 0 -35px; border-radius: 50%; border: 4px solid rgba(255, 80, 60, 0.9);
   box-shadow: 0 0 16px rgba(255, 60, 40, 0.8); animation: teleshrink linear forwards; }
@@ -168,14 +207,3 @@ input[type=text]:focus { border-color: #ffd75e; }
 #result-overlay { position: absolute; inset: 0; z-index: 40; background: #000b;
   display: flex; align-items: center; justify-content: center; }
 #result-title { font-size: 2.6rem; font-style: italic; color: #ffd75e; text-shadow: 0 4px 0 #b8860b; }
-/* --- render干渉・FPS低下対策 (GPUアクセラレーションの強制) --- */
-/* WebGL(Canvas)とUIの描画レイヤーを完全に分離し、処理落ちを防ぐ */
-#game-buttons, 
-#hud, 
-#vignette, 
-.guard-btn,
-.aim-flash,
-.telegraph {
-  transform: translateZ(0);
-  will-change: transform;
-}
